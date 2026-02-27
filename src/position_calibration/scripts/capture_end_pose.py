@@ -9,6 +9,7 @@ import ast
 import os
 
 from intera_core_msgs.msg import IODeviceStatus, EndpointState
+from sensor_msgs.msg import JointState
 
 class EndPoseCapture:
     def __init__(self,
@@ -33,12 +34,24 @@ class EndPoseCapture:
         self._end_pose_sub = rospy.Subscriber(
             "/robot/limb/right/endpoint_state",
             EndpointState,
-            self._get_end_position)
+            self._get_end_effector_pose)
+        self._joint_angle_sub = rospy.Subscriber(
+            "/robot/joint_states",
+            JointState,
+            self._get_joint_angles)
         self.latest_position = None
+        self.latest_orientation = None
+        self.latest_joint_angles = None
         
-    def _get_end_position(self, msg):
+        
+    def _get_end_effector_pose(self, msg):
         with self.mutex:
             self.latest_position = msg.pose.position
+            self.latest_orientation = msg.pose.orientation
+        
+    def _get_joint_angles(self, msg):
+        with self.mutex:
+            self.latest_joint_angles = list(msg.position[1:8])
         
     def _check_click(self, msg):
         with self.mutex:
@@ -76,17 +89,27 @@ class EndPoseCapture:
                 pressed = self.rise
                 self.rise = False
                 pose = self.latest_position
+                orientation = self.latest_orientation
+                joint_angles = self.latest_joint_angles
             if pressed:
                 if pose is None:
                     rospy.logwarn("No pose data available.")
                     return
                 self._load_yaml()
-                self.data[tile] = {
+                self.data.setdefault(tile, {})
+                self.data[tile]['position'] = {
                     "x": pose.x,
                     "y": pose.y,
                     "z": pose.z
                 }
-                rospy.loginfo(f"Captured {tile}: {self.data[tile]}")
+                self.data[tile]['orientation'] = {
+                    "x": orientation.x,
+                    "y": orientation.y,
+                    "z": orientation.z,
+                    "w": orientation.w
+                }
+                self.data[tile]['joint_angles'] = joint_angles
+                rospy.loginfo(f"Captured position info for {tile}.")
                 self._save_yaml()
                 return
             
@@ -95,8 +118,7 @@ class EndPoseCapture:
 if __name__ == "__main__":
     rospy.init_node("end_pose_capture")
     capturer = EndPoseCapture(
-            button_name="right_button_lower",
-            yaml_path=""
+        button_name="right_button_lower"
     )
     rospy.loginfo("End pose capture node initialized.")
     
