@@ -9,6 +9,7 @@ import ast
 import os
 
 from intera_core_msgs.msg import IODeviceStatus, EndpointState
+from sensor_msgs.msg import JointState
 
 class EndPoseCapture:
     def __init__(self,
@@ -36,7 +37,7 @@ class EndPoseCapture:
             self._get_end_effector_pose)
         self._joint_angle_sub = rospy.Subscriber(
             "/robot/joint_states",
-            JointState, # TODO: change to correct message type
+            JointState,
             self._get_joint_angles)
         self.latest_position = None
         self.latest_orientation = None
@@ -50,7 +51,7 @@ class EndPoseCapture:
         
     def _get_joint_angles(self, msg):
         with self.mutex:
-            self.latest_joint_angles = msg.angles # TODO: change to correct field name
+            self.latest_joint_angles = list(msg.position[1:8])
         
     def _check_click(self, msg):
         with self.mutex:
@@ -95,6 +96,7 @@ class EndPoseCapture:
                     rospy.logwarn("No pose data available.")
                     return
                 self._load_yaml()
+                self.data.setdefault(tile, {})
                 self.data[tile]['position'] = {
                     "x": pose.x,
                     "y": pose.y,
