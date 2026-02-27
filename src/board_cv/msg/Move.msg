@@ -1,4 +1,3 @@
-Header header
 string notation
 string from_square
 string from_piece

@@ -18,8 +18,8 @@ import rospy
 
 from board_cv.msg import Move
 
-# rospy.init_node("board_vision")
-# move_pub = rospy.Publisher("/ai_move", Move, queue_size=10)
+rospy.init_node("board_vision")
+move_pub = rospy.Publisher("/ai_move", Move, queue_size=10)
 
 # === CONFIG ===
 CALIB_JSON = "sqdict.json"
@@ -173,21 +173,31 @@ def draw_contours_debug(frame, contours):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
     return dbg
 
-# def publish_ai_move(move, board):
-#     from_square = None
-#     from_piece = None
-#     to_square = None
-#     to_piece = None
-#     from_position, to_position = move.split('-')
-#     if len(from_position) == 3:
-#         from_piece = to_position[0]
-#         from_square = from_position[1:3]
-#     else:
-#         from_piece = "pawn"
-#         from_square = from_position
-#     to_square = to_position
-#     to_piece = board.piece_at(chess.parse_square(to_square))
-#     print(f"From square: {from_square}, from piece: {from_piece}, to square: {to_square}, to piece: {to_piece}")
+def publish_ai_move(move, board):
+    from_square = None
+    from_piece = None
+    to_square = None
+    to_piece = None
+    from_position, to_position = move.split('-')
+    if len(from_position) == 3:
+        from_piece = to_position[0]
+        from_square = from_position[1:3]
+    else:
+        from_piece = "pawn"
+        from_square = from_position
+    to_square = to_position
+    print(f"Parsed: {chess.parse_square(to_square)}")
+    piece_at_to = board.piece_at(chess.parse_square(to_square))
+    to_piece = piece_at_to if piece_at_to else "" 
+    print(to_piece)
+    ai_move = Move()
+    ai_move.notation = move
+    ai_move.from_square = from_square
+    ai_move.from_piece = from_piece
+    ai_move.to_square = to_square
+    ai_move.to_piece = to_piece
+    move_pub.publish(ai_move)
+    print(f"From square: {from_square}, from piece: {from_piece}, to square: {to_square}, to piece: {to_piece}")
 
 # === CAMERA ===
 # cap = cv2.VideoCapture(CAM_INDEX, cv2.CAP_DSHOW)
@@ -606,8 +616,9 @@ try:
         if comp_turn:
             result = engine.play(board, chess.engine.Limit(time=random.uniform(0.4, 0.9)))
             mv = result.move
-            print(f"LAN: {board.lan(mv)}")
-            # publish_ai_move(move = board.lan(mv), board=board)
+            lan_move = board.lan(mv)
+            publish_ai_move(move = lan_move, board=board)
+            board.push(mv)
             move_history.append(mv)
             last_move = mv
             print(f"[AI] Komputer main: {mv.uci()}")
