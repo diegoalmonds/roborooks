@@ -29,25 +29,25 @@ MIN_CONTOUR_AREA = 250
 CAM_INDEX = 2
 BOARD_ORIENTATION = "TOP"  # "TOP", "BOTTOM", "SIDE_L", "SIDE_R"
 
-DEBUG_MODE = False  # Tekan 'd' untuk toggle ON/OFF
+DEBUG_MODE = False  # Press 'd' to toggle ON/OFF
 
 # === ENGINE ===
 if not os.path.exists(ENGINE_PATH):
-    print(f"[ERROR] File engine tidak ditemukan: {ENGINE_PATH}")
+    print(f"[ERROR] Engine file not found: {ENGINE_PATH}")
     sys.exit(1)
 
 engine = chess.engine.SimpleEngine.popen_uci(ENGINE_PATH)
-print(f"[INFO] Stockfish dijalankan dari {ENGINE_PATH}")
+print(f"[INFO] Stockfish started from {ENGINE_PATH}")
 
 # === LOAD JSON ===
 if not os.path.exists(CALIB_JSON):
-    print(f"[ERROR] File kalibrasi tidak ditemukan: {CALIB_JSON}")
+    print(f"[ERROR] Calibration file not found: {CALIB_JSON}")
     engine.quit()
     sys.exit(1)
 
 with open(CALIB_JSON, "r") as f:
     sq_points = json.load(f)
-print(f"[INFO] Memuat {len(sq_points)} kotak dari {CALIB_JSON}")
+print(f"[INFO] Loaded {len(sq_points)} squares from {CALIB_JSON}")
 
 # === ORIENTATION ===
 files = 'abcdefgh'
@@ -82,7 +82,7 @@ def find_square(x, y):
     pt = (float(x), float(y))
     for sq, pts in sq_points.items():
         poly = np.array(pts, np.int32)
-        # pointPolygonTest >= 0 berarti di dalam atau di tepi polygon
+        # pointPolygonTest >= 0 means inside or on the edge of the polygon
         if cv2.pointPolygonTest(poly, pt, False) >= 0:
             return sq
     return None
@@ -106,7 +106,7 @@ def draw_board_labels(base_frame):
     return overlay
 
 def pick_top_two_contours_by_square(contours, mask_board):
-    # Kontur -> (square, contour, area, cx, cy)
+    # Contours -> (square, contour, area, cx, cy)
     items = []
     for c in contours:
         area = cv2.contourArea(c)
@@ -116,14 +116,14 @@ def pick_top_two_contours_by_square(contours, mask_board):
         x, y, w, h = cv2.boundingRect(c)
         M = cv2.moments(c)
 
-        # Bias: gunakan center-top dari bounding box (bagian atas bidak) — 30..40% dari tinggi
+        # Bias: use center-top of bounding box (top of piece) — 30..40% of height
         top_center_y = int(y + 0.35 * h)
         bbox_center_x = int(x + w // 2)
 
         if M["m00"] != 0:
             cx_m = int(M["m10"] / M["m00"])
             cy_m = int(M["m01"] / M["m00"])
-            # gunakan centroid untuk X (lebih stabil horizontal), dan gunakan top_center_y untuk Y
+            # use centroid for X (more stable horizontally), and use top_center_y for Y
             cx = cx_m
             cy = top_center_y
         else:
@@ -241,7 +241,7 @@ config.enable_stream(rs.stream.color, 640, 480, rs.format.rgb8, 30)
 try:
     profile = pipe.start(config)
 except Exception as e:
-    print("❌ RealSense tidak bisa dibuka:", e)
+    print("❌ RealSense could not be opened:", e)
     exit()
 
 board = chess.Board()
@@ -250,7 +250,7 @@ last_move = None
 comp_turn = False
 move_history = []
 
-print("[INFO] Tekan 'r' dua kali untuk langkah, 'u'=undo, 'U'=undo 2 langkah, 'd'=toggle debug, 'q'=keluar.")
+print("[INFO] Press 'r' twice to register a move, 'u'=undo, 'U'=undo 2 moves, 'd'=toggle debug, 'q'=quit.")
 show_board(board)
 
 try:
@@ -285,22 +285,22 @@ try:
                 except cv2.error:
                     pass
 
-        # === Rekam langkah pemain (dua kali tekan 'r') ===
+        # === Record player move (press 'r' twice) ===
         if key == ord('r'):
             if ref_frame is None:
                 ref_frame = frame_raw.copy()
-                print("[DEBUG] Frame awal disimpan.")
+                print("[DEBUG] Initial frame saved.")
 
                 # ts = int(time.time() * 1000)
                 # cv2.imwrite(f"debug_ref_{ts}.png", ref_frame)
                 # cv2.imshow("DEBUG Ref", ref_frame)
             else:
-                print("[DEBUG] Frame akhir direkam, memproses...")
+                print("[DEBUG] Final frame captured, processing...")
                 # ts = int(time.time() * 1000)
                 # cv2.imwrite(f"debug_cur_{ts}.png", frame_raw)
                 # cv2.imshow("DEBUG Cur", frame_raw)
 
-                # versi lebih universal (untuk putih gading dan hitam/coklat)
+                # more universal version (for ivory white and black/brown pieces)
                 g1 = 0.5 * ref_frame[:, :, 2] + 0.4 * ref_frame[:, :, 1] + 0.1 * ref_frame[:, :, 0]
                 g2 = 0.5 * frame_raw[:, :, 2] + 0.4 * frame_raw[:, :, 1] + 0.1 * frame_raw[:, :, 0]
                 g1 = g1.astype(np.uint8)
@@ -317,7 +317,7 @@ try:
                 g2 = cv2.GaussianBlur(g2, (5, 5), 0)
                 diff = cv2.absdiff(g1, g2)
                 diff = cv2.GaussianBlur(diff, (3,3), 0)
-                diff = cv2.convertScaleAbs(diff, alpha=1.3, beta=0)  # memperkuat kontras perbedaan
+                diff = cv2.convertScaleAbs(diff, alpha=1.3, beta=0)  # amplify difference contrast
                 _, diff_thresh = cv2.threshold(diff, MOVE_THRESHOLD, 255, cv2.THRESH_BINARY)
 
                 # Save raw diff + threshold + masked result
@@ -334,7 +334,7 @@ try:
                 diff_m = cv2.dilate(diff_thresh, None, iterations=4)
                 diff_m = cv2.erode(diff_m, None, iterations=2)
 
-                # === Batasi area deteksi hanya pada papan catur ===
+                # === Restrict detection area to the chessboard only ===
                 mask_board = np.zeros_like(diff_m)
                 for pts in sq_points.values():
                     cv2.fillPoly(mask_board, [np.array(pts, np.int32)], 255)
@@ -349,10 +349,10 @@ try:
 
                 contours, _ = cv2.findContours(diff_m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-                # ambil kandidat dari kontur (kontur, dan bounding)
+                # get candidates from contours (contour and bounding box)
                 contours_filtered = [c for c in contours if cv2.contourArea(c) > MIN_CONTOUR_AREA]
 
-                # helper: buat daftar kandidat kotak (square) untuk sebuah kontur
+                # helper: build list of candidate squares for a contour
                 def candidates_for_contour(c):
                     x, y, w, h = cv2.boundingRect(c)
                     M = cv2.moments(c)
@@ -363,9 +363,9 @@ try:
                         cx_m = x + w//2
                         cy_m = y + h//2
 
-                    # coba beberapa vertical bias dan sedikit horizontal jitter
-                    y_factors = [0.20, 0.30, 0.40]   # 20%..40% dari atas bounding box
-                    x_jitters = [0, -6, 6]           # geser kiri/kanan kecil
+                    # try several vertical biases and small horizontal jitters
+                    y_factors = [0.20, 0.30, 0.40]   # 20%..40% from top of bounding box
+                    x_jitters = [0, -6, 6]           # small left/right shift
                     cands = []
                     for yf in y_factors:
                         cy_try = int(y + yf * h)
@@ -425,7 +425,7 @@ try:
                         if found:
                             break
 
-                    # fallback: if not found any legal move using candidates, use previous simple logic:
+                    # fallback: if no legal move found using candidates, use previous simple logic:
                     if not found:
                         # default: map using the first candidate of each contour (if exists)
                         if list0 and list1:
@@ -461,9 +461,9 @@ try:
                 if DEBUG_MODE:
                     print(f"[DEBUG] Contour candidate lists lengths: {[len(l) for _,l in contour_cand_lists]}")
                     print(f"[DEBUG] Chosen mapping: {chosen_mapping}")
-                    print(f"[DEBUG] Kotak terdeteksi: {detected}")
+                    print(f"[DEBUG] Detected squares: {detected}")
 
-                # visual debug: tunjukkan kotak dan titik yang dipilih
+                # visual debug: show squares and chosen points
                 if DEBUG_MODE and chosen_mapping:
                     dbg = frame_raw.copy()
                     for sq, cx, cy in chosen_mapping:
@@ -474,27 +474,26 @@ try:
                         cv2.putText(dbg, sq, (int(cx)+6, int(cy)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1)
                     cv2.imshow("Contours", dbg)
 
-                print(f"[DEBUG] Kotak terdeteksi: {detected}")
+                print(f"[DEBUG] Detected squares: {detected}")
 
-                # === interpretasi langkah ===
+                # === interpret move ===
                 from_sq, to_sq = None, None
                 if len(detected) == 2:
                     a, b = list(detected)
 
-                    # Gunakan snapshot board sebelumnya untuk deteksi lebih akurat
-                    # (salin state sebelum langkah)
+                    # Use board snapshot before move for more accurate detection
                     prev_board = board.copy()
 
                     piece_a = prev_board.piece_at(chess.parse_square(a))
                     piece_b = prev_board.piece_at(chess.parse_square(b))
 
-                    # Jika hanya satu yang punya bidak di posisi awal -> itu from_sq
+                    # If only one has a piece in the original position -> that is from_sq
                     if piece_a and not piece_b:
                         from_sq, to_sq = a, b
                     elif piece_b and not piece_a:
                         from_sq, to_sq = b, a
                     else:
-                        # Jika keduanya kosong atau keduanya terisi (sulit), gunakan heuristik arah rank
+                        # If both are empty or both occupied (ambiguous), use rank heuristic
                         def rank_idx(s): return int(s[1])
                         if board.turn == chess.WHITE:
                             from_sq, to_sq = sorted([a, b], key=rank_idx)
@@ -502,14 +501,14 @@ try:
                             from_sq, to_sq = sorted([a, b], key=rank_idx, reverse=True)
 
                 elif len(detected) == 1:
-                    # hanya satu kotak berubah — coba cara lebih andal untuk cari from_sq
+                    # only one square changed — try more reliable method to find from_sq
                     to_sq = list(detected)[0]
-                    prev_board = board.copy()  # snapshot posisi sebelum langkah
+                    prev_board = board.copy()  # snapshot position before move
                     piece_now = board.piece_at(chess.parse_square(to_sq))
 
-                    # 1) Jika kotak sekarang terisi, coba cari legal move yang berakhir di sini
+                    # 1) If square is now occupied, try to find a legal move ending here
                     if piece_now:
-                        # filter kandidat yang asalnya memang punya piece pada prev_board
+                        # filter candidates whose origin actually had a piece on prev_board
                         candidates = [m for m in board.legal_moves if m.uci()[2:] == to_sq]
                         chosen = None
                         for m in candidates:
@@ -517,29 +516,29 @@ try:
                             if prev_board.piece_at(chess.parse_square(src)):
                                 chosen = m
                                 break
-                        # jika tidak ketemu yang asalnya terisi, fallback ke first candidate
+                        # if none found with occupied origin, fallback to first candidate
                         if not chosen and candidates:
                             chosen = candidates[0]
                         if chosen:
                             from_sq = chosen.uci()[:2]
                             to_sq = chosen.uci()[2:]
                     else:
-                        # 2) kalau kotak akhir kosong -> kemungkinan bidak pindah dari kotak sekeliling
+                        # 2) if destination square is empty -> piece likely moved from a neighboring square
                         file = to_sq[0]
                         rank = int(to_sq[1])
                         fi = files.index(file)
 
-                        # buat urutan pencarian yang prioritas: vertikal (sesuai giliran), horizontal, diagonal, 2-langkah
+                        # build search order with priority: vertical (by turn), horizontal, diagonal, 2-step
                         search_offsets = []
 
                         if board.turn == chess.WHITE:
-                            # prefer datang dari bawah (rank-1), lalu left/right, lalu diagonals, then two-step from rank-2
+                            # prefer coming from below (rank-1), then left/right, then diagonals, then two-step from rank-2
                             search_offsets += [(0, -1), (-1, 0), (1, 0), (-1, -1), (1, -1), (0, -2)]
                         else:
                             # black moves downward in rank numbers (from higher rank to lower)
                             search_offsets += [(0, 1), (-1, 0), (1, 0), (-1, 1), (1, 1), (0, 2)]
 
-                        # ensure we also consider all orthogonals/diagonals if needed
+                        # also consider all orthogonals/diagonals if needed
                         search_offsets += [(-1, 1), (1, 1), (-1, -1), (1, -1)]
 
                         found = False
@@ -555,7 +554,7 @@ try:
                                         from_sq = adj
                                         found = True
                                         break
-                        # 3) jika belum juga ketemu, fallback: cari *any* neighbor yang punya piece (tanpa cek legal)
+                        # 3) if still not found, fallback: find *any* neighbor with a piece (no legality check)
                         if not found:
                             for df in (-1, 0, 1):
                                 for dr in (-1, 0, 1):
@@ -566,7 +565,7 @@ try:
                                     if 0 <= f_idx < 8 and 1 <= r_idx <= 8:
                                         adj = f"{files[f_idx]}{r_idx}"
                                         if prev_board.piece_at(chess.parse_square(adj)):
-                                            # jika move adj->to_sq legal gunakan, kalau tidak, tetap simpan adj sebagai last-resort
+                                            # if move adj->to_sq is legal use it, otherwise keep adj as last resort
                                             try_mv = None
                                             try:
                                                 try_mv = chess.Move.from_uci(adj + to_sq)
@@ -580,12 +579,12 @@ try:
                                                 from_sq = adj
                                 if found:
                                     break
-                        # jika masih None, from_sq tetap None dan akan dianggap invalid
+                        # if still None, from_sq remains None and will be treated as invalid
 
                 else:
-                    print("[WARN] Deteksi tidak valid.")
+                    print("[WARN] Invalid detection.")
 
-                # === eksekusi langkah ===
+                # === execute move ===
                 if from_sq and to_sq:
                     move = from_sq + to_sq
                     try:
@@ -594,50 +593,50 @@ try:
                             board.push(mv)
                             move_history.append(mv)
                             last_move = mv
-                            print(f"[YOU] Kamu main: {move}")
+                            print(f"[YOU] You played: {move}")
                             show_board(board, last_move)
 
-                            # === HIGHLIGHT langkah pemain (FROM hijau, TO merah) ===
+                            # === HIGHLIGHT player move (FROM green, TO red) ===
                             try:
                                 frame_high = overlay_poly(frame_raw.copy(), sq_points[from_sq], (0, 255, 0), 0.5)
                                 frame_high = overlay_poly(frame_high, sq_points[to_sq], (0, 0, 255), 0.5)
                                 frame_high = draw_board_labels(frame_high)
                                 cv2.imshow("Chess Tracker", frame_high)
-                                cv2.waitKey(700)  # tampilkan sebentar
+                                cv2.waitKey(700)  # display briefly
                             except Exception as e:
-                                # jangan crash kalau key tidak ada di sq_points (safety)
+                                # don't crash if key not in sq_points (safety)
                                 if DEBUG_MODE:
-                                    print(f"[DEBUG] Gagal highlight pemain: {e}")
+                                    print(f"[DEBUG] Failed to highlight player move: {e}")
 
                             comp_turn = True
                         else:
                             print(f"[!] Invalid move: {move}")
                     except Exception as e:
-                        print(f"[!] Error interpretasi langkah: {e}")
+                        print(f"[!] Error interpreting move: {e}")
 
                 ref_frame = None
 
-        # === Undo 1 langkah ===
+        # === Undo 1 move ===
         if key == ord('u'):
             if move_history:
                 mv = move_history.pop()
                 board.pop()
-                print(f"[UNDO] Menghapus langkah terakhir: {mv}")
+                print(f"[UNDO] Removed last move: {mv}")
                 show_board(board)
             else:
-                print("[INFO] Tidak ada langkah untuk di-undo.")
+                print("[INFO] No moves to undo.")
 
-        # === Undo 2 langkah ===
+        # === Undo 2 moves ===
         if key == ord('U'):
             if len(move_history) >= 2:
                 mv2 = move_history.pop()
                 mv1 = move_history.pop()
                 board.pop()
                 board.pop()
-                print(f"[UNDO] Menghapus 2 langkah terakhir: {mv1}, {mv2}")
+                print(f"[UNDO] Removed last 2 moves: {mv1}, {mv2}")
                 show_board(board)
             else:
-                print("[INFO] Tidak cukup langkah untuk undo 2 kali.")
+                print("[INFO] Not enough moves to undo 2 times.")
 
         # === COMPUTER TURN ===
         if comp_turn:
@@ -648,28 +647,28 @@ try:
             board.push(mv)
             move_history.append(mv)
             last_move = mv
-            print(f"[AI] Komputer main: {mv.uci()}")
+            print(f"[AI] Computer played: {mv.uci()}")
             show_board(board, last_move)
 
-            # === HIGHLIGHT langkah AI (FROM kuning, TO oranye) ===
+            # === HIGHLIGHT AI move (FROM yellow, TO orange) ===
             try:
                 move_str = mv.uci()
-                frame_ai = overlay_poly(frame_raw.copy(), sq_points[move_str[:2]], (0, 255, 255), 0.45)  # kuning
-                frame_ai = overlay_poly(frame_ai, sq_points[move_str[2:]], (0, 165, 255), 0.45)  # oranye-ish
+                frame_ai = overlay_poly(frame_raw.copy(), sq_points[move_str[:2]], (0, 255, 255), 0.45)  # yellow
+                frame_ai = overlay_poly(frame_ai, sq_points[move_str[2:]], (0, 165, 255), 0.45)  # orange-ish
                 frame_ai = draw_board_labels(frame_ai)
                 cv2.imshow("Chess Tracker", frame_ai)
                 cv2.waitKey(900)
             except Exception as e:
                 if DEBUG_MODE:
-                    print(f"[DEBUG] Gagal highlight AI: {e}")
+                    print(f"[DEBUG] Failed to highlight AI move: {e}")
 
             comp_turn = False
 
         if key == ord('q'):
-            print("[INFO] Keluar.")
+            print("[INFO] Quitting.")
             break
 
-    print("[INFO] Permainan selesai.")
+    print("[INFO] Game over.")
 finally:
     try:
         pipe.stop()

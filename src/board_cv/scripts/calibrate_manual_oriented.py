@@ -9,8 +9,8 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--rotate", type=int, default=0,
                     choices=[0, 90, 180, 270],
-                    help="Rotasi orientasi papan terhadap kamera (CW). "
-                         "Misal kamera dari kanan = 90, dari belakang = 180, dari kiri = 270.")
+                    help="Rotation of board orientation relative to camera (CW). "
+                         "E.g. camera from the right = 90, from behind = 180, from the left = 270.")
 args = parser.parse_args()
 CAM_ROT = args.rotate
 
@@ -20,12 +20,12 @@ def mouse_click(event, x, y, flags, param):
     if event == cv2.EVENT_LBUTTONDOWN:
         if len(points) < 4:
             points.append((x, y))
-            print(f"[INFO] Titik {len(points)}: {x}, {y}")
+            print(f"[INFO] Point {len(points)}: {x}, {y}")
         else:
-            print("[INFO] Sudah 4 titik. Tekan 'r' untuk reset atau 's' untuk simpan.")
+            print("[INFO] Already 4 points. Press 'r' to reset or 's' to save.")
 
 def remap_index(r_disp, c_disp, cam_rot):
-    """Remap index (baris, kolom) dari tampilan kamera ke notasi papan standar."""
+    """Remap index (row, column) from camera view to standard board notation."""
     if cam_rot == 0:
         r_std, c_std = r_disp, c_disp
     elif cam_rot == 90:
@@ -38,7 +38,7 @@ def remap_index(r_disp, c_disp, cam_rot):
         r_std, c_std = r_disp, c_disp
     return r_std, c_std
 
-# === Buka kamera ===
+# === Open camera ===
 # cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
 pipe = rs.pipeline()
 config = rs.config()
@@ -48,22 +48,22 @@ config.enable_stream(rs.stream.color, 640, 480, rs.format.rgb8, 30)
 try:
     profile = pipe.start(config)
 except Exception as e:
-    print("❌ RealSense tidak bisa dibuka:", e)
+    print("❌ RealSense could not be opened:", e)
     exit()
 
 # if not cap.isOpened():
-#     print("❌ Kamera tidak bisa dibuka.")
+#     print("❌ Camera could not be opened.")
 #     exit()
 
 
-cv2.namedWindow("Kalibrasi Papan")
-cv2.setMouseCallback("Kalibrasi Papan", mouse_click)
+cv2.namedWindow("Board Calibration")
+cv2.setMouseCallback("Board Calibration", mouse_click)
 
-print("📸 Instruksi:")
-print(" 1️⃣ Arahkan kamera ke posisi yang AKAN digunakan (misal dari samping).")
-print(" 2️⃣ Klik 4 titik sudut papan (urut: kiri-atas, kanan-atas, kanan-bawah, kiri-bawah).")
-print(" 3️⃣ Tekan 'r' untuk reset, 's' untuk simpan hasil sqdict.json, 'q' untuk keluar.")
-print(f"[INFO] Rotasi papan relatif ke kamera: {CAM_ROT}° (CW)\n")
+print("📸 Instructions:")
+print(" 1️⃣ Point the camera at the position that WILL be used (e.g. from the side).")
+print(" 2️⃣ Click 4 corner points of the board (in order: top-left, top-right, bottom-right, bottom-left).")
+print(" 3️⃣ Press 'r' to reset, 's' to save sqdict.json, 'q' to quit.")
+print(f"[INFO] Board rotation relative to camera: {CAM_ROT}° (CW)\n")
 
 while True:
     frames = pipe.wait_for_frames()
@@ -76,14 +76,14 @@ while True:
 
     vis = frame.copy()
 
-    # Gambar titik klik
+    # Draw clicked points
     for idx, p in enumerate(points):
         cv2.circle(vis, p, 6, (0, 0, 255), -1)
         cv2.putText(vis, str(idx+1), (p[0]+8, p[1]-8),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
 
     if len(points) == 4:
-        # Gambar kotak & grid
+        # Draw box & grid
         pts = np.array(points, dtype=np.int32)
         cv2.polylines(vis, [pts], True, (255,255,255), 2)
 
@@ -94,13 +94,13 @@ while True:
         src_grid = np.array([[[x,y] for x in range(9)] for y in range(9)], dtype=np.float32)
         dst_grid = cv2.perspectiveTransform(src_grid.reshape(-1,1,2), H).reshape(9,9,2)
 
-        # Gambar grid
+        # Draw grid
         for r in range(9):
             cv2.polylines(vis, [dst_grid[r,:,:].astype(int)], False, (180,180,180), 1)
         for c in range(9):
             cv2.polylines(vis, [dst_grid[:,c,:].astype(int)], False, (180,180,180), 1)
 
-        # === Tampilkan label notasi papan standar ===
+        # === Display standard board notation labels ===
         files = 'abcdefgh'
         ranks = '87654321'
         font = cv2.FONT_HERSHEY_SIMPLEX
@@ -116,18 +116,18 @@ while True:
                 cx, cy = int(center[0]), int(center[1])
                 cv2.putText(vis, label, (cx-12, cy+5), font, 0.5, (0,255,255), 1, cv2.LINE_AA)
 
-    cv2.imshow("Kalibrasi Papan", vis)
+    cv2.imshow("Board Calibration", vis)
     key = cv2.waitKey(1) & 0xFF
 
     if key == ord('q'):
-        print("Keluar tanpa menyimpan.")
+        print("Exiting without saving.")
         break
     elif key == ord('r'):
         points = []
-        print("[INFO] Reset titik.")
+        print("[INFO] Points reset.")
     elif key == ord('s'):
         if len(points) != 4:
-            print("[WARN] Harus klik 4 titik dulu sebelum menyimpan.")
+            print("[WARN] You must click 4 points before saving.")
             continue
 
         src = np.array([[0,0],[8,0],[8,8],[0,8]], dtype=np.float32)
@@ -146,7 +146,7 @@ while True:
                 bl = dst_grid[r+1, c].tolist()
                 displayed_squares[(r,c)] = [tl,tr,br,bl]
 
-        # Remap orientasi papan ke notasi standar
+        # Remap board orientation to standard notation
         files = 'abcdefgh'
         ranks = '87654321'
         squares_std = {}
@@ -158,9 +158,8 @@ while True:
 
         with open('sqdict.json', 'w') as f:
             json.dump(squares_std, f, indent=2)
-        print(f"[✅] sqdict.json disimpan dengan rotasi orientasi {CAM_ROT}° (notasi sudah disesuaikan).")
+        print(f"[✅] sqdict.json saved with board orientation rotation {CAM_ROT}° (notation already adjusted).")
         break
 
 pipe.stop()
 cv2.destroyAllWindows()
-
