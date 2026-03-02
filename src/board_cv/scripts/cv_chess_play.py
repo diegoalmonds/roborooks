@@ -14,6 +14,12 @@ import os
 import sys
 import cairosvg
 import time
+import rospy
+
+from board_cv.msg import Move
+
+rospy.init_node("board_vision")
+move_pub = rospy.Publisher("/ai_move", Move, queue_size=10)
 
 # === CONFIG ===
 CALIB_JSON = "sqdict.json"
@@ -167,13 +173,66 @@ def draw_contours_debug(frame, contours):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
     return dbg
 
-# === CAMERA ===
-# cap = cv2.VideoCapture(CAM_INDEX, cv2.CAP_DSHOW)
-# if not cap.isOpened():
-#     print("[ERROR] Kamera tidak bisa dibuka.")
-#     engine.quit()
-#     sys.exit(1)
+def publish_ai_move(move, board):
+    ai_move = Move()
+    if 'O' in move: # castle
+        ai_move.move_type = "castle"
+        if move == "O-O":
+            ai_move.from_square = "e1" if board.turn == chess.WHITE else "e8"
+            ai_move.from_piece = "king"
+            ai_move.to_square = "g1" if board.turn == chess.WHITE else "g8"
+            ai_move.to_piece = ""
+            move_pub.publish(ai_move) # king move first
+            ai_move.from_square = "h1" if board.turn == chess.WHITE else "h8"
+            ai_move.from_piece = "rook"
+            ai_move.to_square = "f1" if board.turn == chess.WHITE else "f8"
+            ai_move.to_piece = ""
+            move_pub.publish(ai_move) # then rook move
+            return
+        else:
+            ai_move.from_square = "e1" if board.turn == chess.WHITE else "e8"
+            ai_move.from_piece = "king"
+            ai_move.to_square = "c1" if board.turn == chess.WHITE else "c8"
+            ai_move.to_piece = ""
+            move_pub.publish(ai_move) # king move first
+            ai_move.from_square = "a1" if board.turn == chess.WHITE else "a8"
+            ai_move.from_piece = "rook"
+            ai_move.to_square = "d1" if board.turn == chess.WHITE else "d8"
+            ai_move.to_piece = ""
+            move_pub.publish(ai_move) # then rook move
+            return
+    elif 'x' in move: # capture
+        ai_move.move_type = "capture"
+        from_position, to_position = move.split('x')
+        ai_move.from_square = from_position[1:3] if len(from_position) > 2 else from_position
+        ai_move.from_piece = from_position[0] if len(from_position) > 2 else "p"
+        ai_move.to_square = to_position
+        check_piece = board.piece_at(chess.parse_square(ai_move.to_square)).lower()
+        ai_move.to_piece = check_piece if check_piece else ""
+        if '=' in move:
+            ai_move.promotion_piece = move.split('=')[1]
+    elif '=' in move: # promotion
+        ai_move.move_type = "promotion"
+        from_position, to_position = move.split('-')
+        to_position, promotion = to_position.split('=')
+        ai_move.from_square = from_position[1:3] if len(from_position) > 2 else from_position
+        ai_move.from_piece = "p"
+        ai_move.to_square = to_position
+        ai_move.to_piece = ""
+        ai_move.promotion_piece = promotion
+    elif '-' in move: # normal move
+        ai_move.move_type = "move"
+        from_position, to_position = move.split('-')
+        ai_move.from_square = from_position[1:3] if len(from_position) > 2 else from_position
+        ai_move.from_piece = from_position[0] if len(from_position) > 2 else "p"
+        ai_move.to_square = to_position
+        check_piece = board.piece_at(chess.parse_square(ai_move.to_square)).lower()
+        ai_move.to_piece = check_piece if check_piece else ""
+        
+    ai_move.notation = move
+    move_pub.publish(ai_move)
 
+# === CAMERA ===
 pipe = rs.pipeline()
 config = rs.config()
 
@@ -584,6 +643,8 @@ try:
         if comp_turn:
             result = engine.play(board, chess.engine.Limit(time=random.uniform(0.4, 0.9)))
             mv = result.move
+            lan_move = board.lan(mv)
+            publish_ai_move(move = lan_move, board=board)
             board.push(mv)
             move_history.append(mv)
             last_move = mv
