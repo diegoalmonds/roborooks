@@ -14,12 +14,12 @@ from intera_motion_interface import (
 from geometry_msgs.msg import Pose, Point, Quaternion
 
 piece_heights = {
-    'pawn': 0.05,
-    'rook': 0.07,
-    'knight': 0.06,
-    'bishop': 0.06,
-    'queen': 0.08,
-    'king': 0.09
+    'p': 0.05,
+    'r': 0.07,
+    'n': 0.06,
+    'b': 0.06,
+    'q': 0.08,
+    'k': 0.09
 }
 
 class ChessWaypointSystem:
@@ -49,29 +49,28 @@ class ChessWaypointSystem:
 
     def _perform_ai_move(self, msg):
         rospy.loginfo("Received AI move.")
-        chess_notation = msg.notation
-        move_uci = msg.uci
-        from_square = msg.from_Square
+        move_type = msg.move_type
+        move_notation = msg.notation
+        from_square = msg.from_square
         to_square = msg.to_square
         from_piece = msg.from_piece
         to_piece = msg.to_piece
-        rospy.info(f"Executing move: {chess_notation}")
-        if '#' in chess_notation:
+        promotion = msg.promotion
+        rospy.info(f"Executing move: {move_notation}")
+        if 'checkmate' == move_type:
             self._checkmate()
-        elif 'x' in chess_notation: # capture
-            self._discard(square=to_square, piece=to_piece) # remove captured piece
-            self._move(from_square=from_square, to_square=to_square, from_piece=from_piece) # move piece to new square
-        elif '=' in chess_notation:
-            self._promote(from_square=from_square, to_square=to_square, from_piece=from_piece, promotion_piece=move_uci[-1])
-        elif '-' in chess_notation:
-            self._castle(notation=chess_notation)
-        else:
+        elif 'capture' == move_type: # capture
+            self._discard(square=to_square, piece=to_piece)
+            self._move(from_square=from_square, to_square=to_square, from_piece=from_piece)
+        elif "promotion" == move_type:
+            self._promote(from_square=from_square, to_square=to_square, from_piece=from_piece, promotion_piece=promotion)
+        else: # castle or regular move
             self._move(from_square=from_square, to_square=to_square, from_piece=from_piece)
         move = self._traj.send_trajectory()
         if move is None:
-            rospy.loginfo(f"Failed to execute move: {chess_notation}")
+            rospy.loginfo(f"Failed to execute move: {move_notation}")
         else:
-            rospy.loginfo(f"Successfully executed move: {chess_notation}")
+            rospy.loginfo(f"Successfully executed move: {move_notation}")
 
 
     def _move(self, from_square, to_square, piece):
@@ -116,10 +115,10 @@ class ChessWaypointSystem:
             self._append_waypoint(joint_solution)
         else:
             rospy.logerr("No IK solution found for pick pose of piece %s at square %s", piece, square)
-        if release:
-            # turn magnet off to release piece
-        else:
-            # turn magnet on to grasp piece
+        # if release:
+        #     # turn magnet off to release piece
+        # else:
+        #     # turn magnet on to grasp piece
         pick_point.y = square_point[1] + piece_heights[piece]
         joint_solution = self._limb.ik_request(pick_pose)
         if joint_solution:
@@ -132,14 +131,10 @@ class ChessWaypointSystem:
         self._move(from_square=from_square, to_square=to_square, from_piece=from_piece, piece="pawn") # move pawn to promotion square
         self._discard(square=to_square, piece="pawn") # discard pawn
         self._move(from_square=promotion_piece + "_promote", to_square=to_square, piece=promotion_piece) # move promotion piece to promotion square
-    
-    def _castle(self, notation):
-        if notation == "O-O":
-            # kingside castle logic
-        elif notation == "O-O-O":
-            # queenside castle logic
 
     def _checkmate(self):
+        # define checkmate sequence of waypoints here
+        pass
 
     # add type checking logic (is of type Pose, or type list with 7 joint angles?)
     def _append_waypoint(self, angles):
