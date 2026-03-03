@@ -7,19 +7,21 @@ import yaml
 import os
 
 from intera_motion_interface import (
-    MotionTrajectory,
     MotionWaypoint,
+    MotionTrajectory,
     MotionWaypointOptions
 )
+
 from geometry_msgs.msg import Pose, Point, Quaternion
+from board_cv.msg import Move
 
 piece_heights = {
-    'p': 0.05,
-    'r': 0.07,
-    'n': 0.06,
-    'b': 0.06,
-    'q': 0.08,
-    'k': 0.09
+    'p': 0.02,
+    'r': 0.02,
+    'n': 0.02,
+    'b': 0.02,
+    'q': 0.02,
+    'k': 0.02
 }
 
 class ChessWaypointSystem:
@@ -28,7 +30,7 @@ class ChessWaypointSystem:
         rospack = rospkg.RosPack()
         pkg_path = rospack.get_path("position_calibration")
         self._yaml_path = os.path.join(pkg_path, "config", "board_positions.yaml")
-        self._board_positions = self._load_board_positions()
+        self._board_positions = self._load_yaml()
 
         self._limb = intera_interface.Limb()
         self._traj = MotionTrajectory()
@@ -55,8 +57,8 @@ class ChessWaypointSystem:
         to_square = msg.to_square
         from_piece = msg.from_piece
         to_piece = msg.to_piece
-        promotion = msg.promotion
-        rospy.info(f"Executing move: {move_notation}")
+        promotion = msg.promotion_piece
+        rospy.loginfo(f"Executing move: {move_notation}")
         if 'checkmate' == move_type:
             self._checkmate()
         elif 'capture' == move_type: # capture
@@ -65,7 +67,7 @@ class ChessWaypointSystem:
         elif "promotion" == move_type:
             self._promote(from_square=from_square, to_square=to_square, from_piece=from_piece, promotion_piece=promotion)
         else: # castle or regular move
-            self._move(from_square=from_square, to_square=to_square, from_piece=from_piece)
+            self._move(from_square=from_square, to_square=to_square, piece=from_piece)
         move = self._traj.send_trajectory()
         if move is None:
             rospy.loginfo(f"Failed to execute move: {move_notation}")
@@ -75,10 +77,10 @@ class ChessWaypointSystem:
 
     def _move(self, from_square, to_square, piece):
         self._append_waypoint(self._board_positions[from_square]['joint_angles']) # go to original piece square
-        self._pick(piece=piece) # pick up piece
+        self._pick(piece=piece, square=from_square) # pick up piece
         self._append_waypoint(self._board_positions['base']['joint_angles']) # move to base position
         self._append_waypoint(self._board_positions[to_square]['joint_angles']) # go to new piece square
-        self._pick(piece=piece, release=True) # release piece
+        self._pick(piece=piece, square=to_square, release=True) # release piece
         self._append_waypoint(self._board_positions['base']['joint_angles']) # move to base position
 
     def _discard(self, square, piece):
@@ -103,26 +105,31 @@ class ChessWaypointSystem:
         square_point = self._board_positions[square]['position']
         pick_pose = Pose()
         pick_point = Point()
-        pick_point.x = square_point[0]
-        pick_point.y = square_point[1] - piece_heights[piece]
-        pick_point.z = square_point[2]
+        pick_point.x = square_point['x']
+        pick_point.y = square_point['y'] - piece_heights[piece]
+        pick_point.z = square_point['z']
         pick_pose.position = pick_point
-        # pick_pose.orientation = Quaternion(0, 1, 0, 0)
-        pick_pose.orientation = self._board_positions[square]['orientation']
+        ori = self._board_positions[square]['orientation']
+        pick_pose.orientation = Quaternion(
+            x=ori['x'],
+            y=ori['y'],
+            z=ori['z'],
+            w=ori['w']
+        )
 
         joint_solution = self._limb.ik_request(pick_pose)
         if joint_solution:
-            self._append_waypoint(joint_solution)
+            self._append_waypoint(angles = list(joint_solution.values())[1:8])
         else:
             rospy.logerr("No IK solution found for pick pose of piece %s at square %s", piece, square)
         # if release:
         #     # turn magnet off to release piece
         # else:
         #     # turn magnet on to grasp piece
-        pick_point.y = square_point[1] + piece_heights[piece]
+        pick_point.y = square_point['y'] + piece_heights[piece]
         joint_solution = self._limb.ik_request(pick_pose)
         if joint_solution:
-            self._append_waypoint(angles = joint_solution)
+            self._append_waypoint(angles = list(joint_solution.values())[1:8])
         else:
             rospy.logerr("No IK solution found for raised pose of piece %s at square %s", piece, square)
         self._append_waypoint(self._board_positions['base']['joint_angles']) # move to base position after pick/release

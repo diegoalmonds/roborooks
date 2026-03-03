@@ -5,6 +5,11 @@ install/
 .catkin_tools/
 log/
 
+# ===== Intera SDK =====
+intera_interface
+intera_sdk
+intera_common
+
 # ===== ROS bags =====
 *.bag
 *.bag.active
