@@ -28,9 +28,10 @@ class MotionTest(object):
         wpt_opts = MotionWaypointOptions()
         wpt = MotionWaypoint(options=wpt_opts, limb=self._limb)
 
-        wpt.set_joint_angles(joint_angles = [0, 0, 0, 0, 0, 0, 0]) # CHANGE JOINT ANGLES TO SOME ARBIRRARY POSITION
+        # wpt.set_joint_angles(joint_angles = [-0.79674609375, -0.0653662109375, -1.43319140625, -0.8150673828125, 1.4381337890625, -0.0590537109375, 1.688892578125]) # CHANGE JOINT ANGLES TO SOME ARBIRRARY POSITION
+        wpt.set_joint_angles(joint_angles = [0.21011328125, -1.153388671875, -1.7165693359375, 1.266869140625, 0.734619140625, 1.16397265625, -1.3556572265625])
         traj.append_waypoint(wpt)
-        wpt.set_joint_angles(joint_angles = [0, 0, 0, 0, 0, 0, 0]) # CHANGE JOINT ANGLES TO SOME ARBIRRARY POSITION
+        wpt.set_joint_angles(joint_angles = [0.09569140625, -0.672208984375, -1.4891884765625, 1.3830283203125, 0.18394140625, 1.1855078125, -1.3558642578125])
         traj.append_waypoint(wpt)
 
         # Send and execute the trajectory
