@@ -34,7 +34,7 @@ class ChessWaypointSystem:
 
         self._limb = intera_interface.Limb()
         self._traj = MotionTrajectory()
-        self._wpt_opts = MotionWaypointOptions()
+        self._wpt_opts = MotionWaypointOptions(max_joint_speed_ratio = 0.4)
         self._wpt = MotionWaypoint(options=self._wpt_opts, limb=self._limb)
         self._ai_move_sub = rospy.Subscriber(
             "/ai_move",
@@ -68,14 +68,22 @@ class ChessWaypointSystem:
             self._promote(from_square=from_square, to_square=to_square, from_piece=from_piece, promotion_piece=promotion)
         else: # castle or regular move
             self._move(from_square=from_square, to_square=to_square, piece=from_piece)
+        rospy.loginfo("Sending trajectory now...")
+        rospy.loginfo(f"Trajectory object: {self._traj}")
         move = self._traj.send_trajectory()
         if move is None:
-            rospy.loginfo(f"Failed to execute move: {move_notation}")
-        else:
+            rospy.loginfo(f"Move executed returned None for: {move_notation}")
+        elif move.result:
             rospy.loginfo(f"Successfully executed move: {move_notation}")
+        else:
+            print(move)
+            rospy.loginfo(f"Failed to execute move: {move_notation}")
 
 
     def _move(self, from_square, to_square, piece):
+        rospy.loginfo(f"Moving from {from_square} to {to_square}")
+        rospy.loginfo(f"From square joint angles: {self._board_positions[from_square]['joint_angles']}")
+        rospy.loginfo(f"To square joint angles: {self._board_positions[to_square]['joint_angles']}")
         self._append_waypoint(self._board_positions[from_square]['joint_angles']) # go to original piece square
         self._pick(piece=piece, square=from_square) # pick up piece
         self._append_waypoint(self._board_positions['base']['joint_angles']) # move to base position
@@ -118,8 +126,10 @@ class ChessWaypointSystem:
         )
 
         joint_solution = self._limb.ik_request(pick_pose)
-        if joint_solution:
-            self._append_waypoint(angles = list(joint_solution.values())[1:8])
+        if joint_solution: 
+            angles = list(joint_solution.values())[1:8]
+            rospy.loginfo(f"IK joint angles used: {angles}")
+            self._append_waypoint(angles = angles)
         else:
             rospy.logerr("No IK solution found for pick pose of piece %s at square %s", piece, square)
         # if release:
@@ -135,8 +145,8 @@ class ChessWaypointSystem:
         self._append_waypoint(self._board_positions['base']['joint_angles']) # move to base position after pick/release
 
     def _promote(self, from_square, to_square, from_piece, promotion_piece):
-        self._move(from_square=from_square, to_square=to_square, from_piece=from_piece, piece="pawn") # move pawn to promotion square
-        self._discard(square=to_square, piece="pawn") # discard pawn
+        self._move(from_square=from_square, to_square=to_square, from_piece=from_piece, piece="p") # move pawn to promotion square
+        self._discard(square=to_square, piece="p") # discard pawn
         self._move(from_square=promotion_piece + "_promote", to_square=to_square, piece=promotion_piece) # move promotion piece to promotion square
 
     def _checkmate(self):
@@ -145,6 +155,16 @@ class ChessWaypointSystem:
 
     # add type checking logic (is of type Pose, or type list with 7 joint angles?)
     def _append_waypoint(self, angles):
+        rospy.loginfo(f"Appending waypoint with angles: {angles}")
+
+        if angles is None:
+            rospy.logerr("Waypoint angles are None!")
+            return
+
+        if len(angles) != 7:
+            rospy.logerr(f"Invalid joint angle length: {len(angles)} (expected 7)")
+            return
+        
         self._wpt.set_joint_angles(joint_angles = angles)
         self._traj.append_waypoint(self._wpt)
 
