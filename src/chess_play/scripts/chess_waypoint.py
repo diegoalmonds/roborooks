@@ -5,6 +5,7 @@ import intera_interface
 import rospkg
 import yaml
 import os
+import serial
 
 from intera_motion_interface import (
     MotionWaypoint,
@@ -16,13 +17,28 @@ from geometry_msgs.msg import Pose, Point, Quaternion
 from board_cv.msg import Move
 
 piece_heights = {
-    'p': 0.01,
+    'p': 0.0225,
     'r': 0.02,
     'n': 0.02,
     'b': 0.02,
     'q': 0.02,
     'k': 0.02
 }
+
+PORT = "/dev/ttyACM0"
+BAUD = 115200
+
+ser = serial.Serial(PORT, BAUD, timeout=1)
+
+def magnet_on():
+    cmd = "PIN 9 ON\n"
+    ser.write(cmd.encode())
+    print("MAGNET ON")
+
+def magnet_off():
+    cmd = "PIN 9 OFF\n"
+    ser.write(cmd.encode())
+    print("MAGNET OFF")
 
 class ChessWaypointSystem:
     def __init__(self):
@@ -133,11 +149,13 @@ class ChessWaypointSystem:
             self._append_waypoint(angles = angles)
         else:
             rospy.logerr("No IK solution found for pick pose of piece %s at square %s", piece, square)
-        # if release:
+        if release:
         #     # turn magnet off to release piece
-        # else:
+            magnet_off()
+        else:
         #     # turn magnet on to grasp piece
-        pick_point.y = square_point['z'] + piece_heights[piece]
+            magnet_on()
+        pick_point.z = square_point['z'] + piece_heights[piece]
         joint_solution = self._limb.ik_request(pick_pose)
         if joint_solution:
             self._append_waypoint(angles = list(joint_solution.values()))
@@ -173,6 +191,7 @@ def main():
     rospy.init_node("chess_waypoint_system")
     chess_waypoint_system = ChessWaypointSystem()
     rospy.spin()
+    ser.close()
 
 if __name__ == "__main__":
     main()
