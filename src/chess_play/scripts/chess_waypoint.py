@@ -17,7 +17,7 @@ from geometry_msgs.msg import Pose, Point, Quaternion
 from board_cv.msg import Move
 
 piece_heights = {
-    'p': 0.0225,
+    'p': 0.025,
     'r': 0.02,
     'n': 0.02,
     'b': 0.02,
@@ -79,7 +79,7 @@ class ChessWaypointSystem:
             self._checkmate()
         elif 'capture' == move_type: # capture
             self._discard(square=to_square, piece=to_piece)
-            self._move(from_square=from_square, to_square=to_square, from_piece=from_piece)
+            self._move(from_square=from_square, to_square=to_square, piece=from_piece)
         elif "promotion" == move_type:
             self._promote(from_square=from_square, to_square=to_square, from_piece=from_piece, promotion_piece=promotion)
         else: # castle or regular move
@@ -118,7 +118,7 @@ class ChessWaypointSystem:
         self._send_single_waypoint(self._board_positions[square]['joint_angles']) # go to piece square
         self._pick(piece=piece, square=square) # pick up piece
         self._send_single_waypoint(self._board_positions['discard']['joint_angles']) # go to discard position
-        self._pick(piece=piece, square=square, release=True) # release piece
+        self._pick(piece=piece, square="discard", release=True) # release piece
 
     def _pick(self, square, piece, release=False):
         """
@@ -187,7 +187,7 @@ class ChessWaypointSystem:
         self._wpt.set_joint_angles(joint_angles = angles)
         self._traj.append_waypoint(self._wpt)
 
-    def _send_single_waypoint(self, angles, pause=3.0):
+    def _send_single_waypoint(self, angles, pause=0.5):
         rospy.loginfo(f"Sending single waypoint: {angles}")
 
         if angles is None:
