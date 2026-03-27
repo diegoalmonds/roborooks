@@ -63,7 +63,7 @@ class ChessWaypointSystem:
             self._checkmate()
         elif 'capture' == move_type: # capture
             self._discard(square=to_square, piece=to_piece)
-            self._move(from_square=from_square, to_square=to_square, from_piece=from_piece)
+            self._move(from_square=from_square, to_square=to_square, piece=from_piece)
         elif "promotion" == move_type:
             self._promote(from_square=from_square, to_square=to_square, from_piece=from_piece, promotion_piece=promotion)
         else: # castle or regular move
