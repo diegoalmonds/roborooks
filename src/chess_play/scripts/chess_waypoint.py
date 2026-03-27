@@ -137,6 +137,7 @@ class ChessWaypointSystem:
         # else:
         #     # turn magnet on to grasp piece
         pick_point.y = square_point['y'] + piece_heights[piece]
+        pick_pose.position = pick_point  # copy the updated point onto the pose
         joint_solution = self._limb.ik_request(pick_pose)
         if joint_solution:
             self._append_waypoint(angles = list(joint_solution.values())[1:8])
@@ -145,7 +146,7 @@ class ChessWaypointSystem:
         self._append_waypoint(self._board_positions['base']['joint_angles']) # move to base position after pick/release
 
     def _promote(self, from_square, to_square, from_piece, promotion_piece):
-        self._move(from_square=from_square, to_square=to_square, from_piece=from_piece, piece="p") # move pawn to promotion square
+        self._move(from_square=from_square, to_square=to_square, piece="p") # move pawn to promotion square
         self._discard(square=to_square, piece="p") # discard pawn
         self._move(from_square=promotion_piece + "_promote", to_square=to_square, piece=promotion_piece) # move promotion piece to promotion square
 
