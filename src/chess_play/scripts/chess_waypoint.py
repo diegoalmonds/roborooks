@@ -133,7 +133,7 @@ class ChessWaypointSystem:
         pick_point = Point()
         pick_point.x = square_point['x']
         pick_point.y = square_point['y']
-        pick_point.z = square_point['z'] - piece_heights[piece]
+        pick_point.z = square_point['z'] - piece_heights[piece] - (square_point['z'] - 3.6) # subtract 3.6 as baseline height
         pick_pose.position = pick_point
         ori = self._board_positions[square]['orientation']
         pick_pose.orientation = Quaternion(
