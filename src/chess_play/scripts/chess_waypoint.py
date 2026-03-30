@@ -107,6 +107,7 @@ class ChessWaypointSystem:
         self._send_single_waypoint(self._board_positions[to_square]['joint_angles']) # go to new piece square
         self._pick(piece=piece, square=to_square, release=True) # release piece
         self._send_single_waypoint(self._board_positions['base']['joint_angles']) # move to base position
+        self._send_single_waypoint(self._board_positions['away']['joint_angles']) # move to position away from camera
 
     def _discard(self, square, piece):
         """
