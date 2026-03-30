@@ -17,12 +17,12 @@ from geometry_msgs.msg import Pose, Point, Quaternion
 from board_cv.msg import Move
 
 piece_heights = {
-    'p': 0.025,
-    'r': 0.02,
-    'n': 0.02,
-    'b': 0.02,
-    'q': 0.02,
-    'k': 0.02
+    'P': 0.067,
+    'R': 0.059,
+    'N': 0.045,
+    'B': 0.035,
+    'Q': 0.03,
+    'K': 0.0275
 }
 
 PORT = "/dev/ttyACM0"
@@ -67,12 +67,13 @@ class ChessWaypointSystem:
 
     def _perform_ai_move(self, msg):
         rospy.loginfo("Received AI move.")
+        print(msg)
         move_type = msg.move_type
         move_notation = msg.notation
         from_square = msg.from_square
         to_square = msg.to_square
-        from_piece = msg.from_piece
-        to_piece = msg.to_piece
+        from_piece = msg.from_piece.upper()
+        to_piece = msg.to_piece.upper()
         promotion = msg.promotion_piece
         rospy.loginfo(f"Executing move: {move_notation}")
         if 'checkmate' == move_type:
@@ -121,7 +122,7 @@ class ChessWaypointSystem:
         self._send_single_waypoint(self._board_positions['discard']['joint_angles']) # go to discard position
         self._pick(piece=piece, square="discard", release=True) # release piece
 
-    def _pick(self, square, piece, release=False):
+    def _pick(self, square, piece, current_pos=None, release=False):
         """
         Lower or raise the end effector by a pre-determined amount based on the piece type and provides the option to grasp or release the piece.
         
@@ -133,7 +134,7 @@ class ChessWaypointSystem:
         pick_point = Point()
         pick_point.x = square_point['x']
         pick_point.y = square_point['y']
-        pick_point.z = square_point['z'] - piece_heights[piece] - (square_point['z'] - 3.6) # subtract 3.6 as baseline height
+        pick_point.z = square_point['z'] - piece_heights[piece] - (square_point['z'] - .36) # subtract .36 as baseline height
         pick_pose.position = pick_point
         ori = self._board_positions[square]['orientation']
         pick_pose.orientation = Quaternion(
@@ -157,7 +158,7 @@ class ChessWaypointSystem:
         #     # turn magnet on to grasp piece
             magnet_on()
         pick_point.z = square_point['z'] + piece_heights[piece]
-        joint_solution = self._limb.ik_request(pick_pose)
+        joint_solution = self._limb.ik_request(pick_pose, seed=joint_solution)
         if joint_solution:
             self._send_single_waypoint(angles = list(joint_solution.values()))
         else:
@@ -166,7 +167,7 @@ class ChessWaypointSystem:
 
     def _promote(self, from_square, to_square, from_piece, promotion_piece):
         self._move(from_square=from_square, to_square=to_square, from_piece=from_piece, piece="p") # move pawn to promotion square
-        self._discard(square=to_square, piece="p") # discard pawn
+        self._discard(square=to_square, piece="P") # discard pawn
         self._move(from_square=promotion_piece + "_promote", to_square=to_square, piece=promotion_piece) # move promotion piece to promotion square
 
     def _checkmate(self):
