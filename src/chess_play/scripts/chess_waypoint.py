@@ -5,6 +5,7 @@ import intera_interface
 import rospkg
 import yaml
 import os
+import serial
 
 from intera_motion_interface import (
     MotionWaypoint,
@@ -16,13 +17,28 @@ from geometry_msgs.msg import Pose, Point, Quaternion
 from board_cv.msg import Move
 
 piece_heights = {
-    'p': 0.02,
+    'p': 0.025,
     'r': 0.02,
     'n': 0.02,
     'b': 0.02,
     'q': 0.02,
     'k': 0.02
 }
+
+PORT = "/dev/ttyACM0"
+BAUD = 115200
+
+ser = serial.Serial(PORT, BAUD, timeout=1)
+
+def magnet_on():
+    cmd = "PIN 9 ON\n"
+    ser.write(cmd.encode())
+    print("MAGNET ON")
+
+def magnet_off():
+    cmd = "PIN 9 OFF\n"
+    ser.write(cmd.encode())
+    print("MAGNET OFF")
 
 class ChessWaypointSystem:
     def __init__(self):
@@ -63,7 +79,7 @@ class ChessWaypointSystem:
             self._checkmate()
         elif 'capture' == move_type: # capture
             self._discard(square=to_square, piece=to_piece)
-            self._move(from_square=from_square, to_square=to_square, from_piece=from_piece)
+            self._move(from_square=from_square, to_square=to_square, piece=from_piece)
         elif "promotion" == move_type:
             self._promote(from_square=from_square, to_square=to_square, from_piece=from_piece, promotion_piece=promotion)
         else: # castle or regular move
@@ -76,20 +92,22 @@ class ChessWaypointSystem:
         elif move.result:
             rospy.loginfo(f"Successfully executed move: {move_notation}")
         else:
-            print(move)
             rospy.loginfo(f"Failed to execute move: {move_notation}")
+        
+        self._traj.clear_waypoints()
 
 
     def _move(self, from_square, to_square, piece):
         rospy.loginfo(f"Moving from {from_square} to {to_square}")
         rospy.loginfo(f"From square joint angles: {self._board_positions[from_square]['joint_angles']}")
         rospy.loginfo(f"To square joint angles: {self._board_positions[to_square]['joint_angles']}")
-        self._append_waypoint(self._board_positions[from_square]['joint_angles']) # go to original piece square
+        self._send_single_waypoint(self._board_positions[from_square]['joint_angles']) # go to original piece square
         self._pick(piece=piece, square=from_square) # pick up piece
-        self._append_waypoint(self._board_positions['base']['joint_angles']) # move to base position
-        self._append_waypoint(self._board_positions[to_square]['joint_angles']) # go to new piece square
+        self._send_single_waypoint(self._board_positions['base']['joint_angles']) # move to base position
+        self._send_single_waypoint(self._board_positions[to_square]['joint_angles']) # go to new piece square
         self._pick(piece=piece, square=to_square, release=True) # release piece
-        self._append_waypoint(self._board_positions['base']['joint_angles']) # move to base position
+        self._send_single_waypoint(self._board_positions['base']['joint_angles']) # move to base position
+        self._send_single_waypoint(self._board_positions['away']['joint_angles']) # move to position away from camera
 
     def _discard(self, square, piece):
         """
@@ -98,10 +116,10 @@ class ChessWaypointSystem:
         :param square: the square from which the piece is being discarded (e.g., 'e4')
         :param piece: the type of chess piece being discarded (e.g., 'pawn', 'rook', 'knight', 'bishop', 'queen', 'king')
         """
-        self._append_waypoint(self._board_positions[square]['joint_angles']) # go to piece square
-        self._pick(piece=piece) # pick up piece
-        self._append_waypoint(self._board_positions['discard']['joint_angles']) # go to discard position
-        self._pick(piece=piece, release=True) # release piece
+        self._send_single_waypoint(self._board_positions[square]['joint_angles']) # go to piece square
+        self._pick(piece=piece, square=square) # pick up piece
+        self._send_single_waypoint(self._board_positions['discard']['joint_angles']) # go to discard position
+        self._pick(piece=piece, square="discard", release=True) # release piece
 
     def _pick(self, square, piece, release=False):
         """
@@ -114,8 +132,8 @@ class ChessWaypointSystem:
         pick_pose = Pose()
         pick_point = Point()
         pick_point.x = square_point['x']
-        pick_point.y = square_point['y'] - piece_heights[piece]
-        pick_point.z = square_point['z']
+        pick_point.y = square_point['y']
+        pick_point.z = square_point['z'] - piece_heights[piece] - (square_point['z'] - 3.6) # subtract 3.6 as baseline height
         pick_pose.position = pick_point
         ori = self._board_positions[square]['orientation']
         pick_pose.orientation = Quaternion(
@@ -126,23 +144,25 @@ class ChessWaypointSystem:
         )
 
         joint_solution = self._limb.ik_request(pick_pose)
-        if joint_solution: 
-            angles = list(joint_solution.values())[1:8]
+        if joint_solution:
+            angles = list(joint_solution.values())
             rospy.loginfo(f"IK joint angles used: {angles}")
-            self._append_waypoint(angles = angles)
+            self._send_single_waypoint(angles = angles)
         else:
             rospy.logerr("No IK solution found for pick pose of piece %s at square %s", piece, square)
-        # if release:
+        if release:
         #     # turn magnet off to release piece
-        # else:
+            magnet_off()
+        else:
         #     # turn magnet on to grasp piece
-        pick_point.y = square_point['y'] + piece_heights[piece]
+            magnet_on()
+        pick_point.z = square_point['z'] + piece_heights[piece]
         joint_solution = self._limb.ik_request(pick_pose)
         if joint_solution:
-            self._append_waypoint(angles = list(joint_solution.values())[1:8])
+            self._send_single_waypoint(angles = list(joint_solution.values()))
         else:
             rospy.logerr("No IK solution found for raised pose of piece %s at square %s", piece, square)
-        self._append_waypoint(self._board_positions['base']['joint_angles']) # move to base position after pick/release
+        self._send_single_waypoint(self._board_positions['base']['joint_angles']) # move to base position after pick/release
 
     def _promote(self, from_square, to_square, from_piece, promotion_piece):
         self._move(from_square=from_square, to_square=to_square, from_piece=from_piece, piece="p") # move pawn to promotion square
@@ -168,10 +188,38 @@ class ChessWaypointSystem:
         self._wpt.set_joint_angles(joint_angles = angles)
         self._traj.append_waypoint(self._wpt)
 
+    def _send_single_waypoint(self, angles, pause=0.5):
+        rospy.loginfo(f"Sending single waypoint: {angles}")
+
+        if angles is None:
+            rospy.logerr("Waypoint angles are None!")
+            return
+
+        if len(angles) != 7:
+            rospy.logerr(f"Invalid joint angle length: {len(angles)} (expected 7)")
+            return
+
+        traj = MotionTrajectory()
+        wpt = MotionWaypoint(options=self._wpt_opts, limb=self._limb)
+        wpt.set_joint_angles(joint_angles=angles)
+        traj.append_waypoint(wpt)
+
+        result = traj.send_trajectory()
+
+        if result is None:
+            rospy.logerr("Trajectory execution returned None")
+        elif result.result:
+            rospy.loginfo("Waypoint executed successfully")
+        else:
+            rospy.logerr("Waypoint execution failed")
+
+        rospy.sleep(pause)
+
 def main():
     rospy.init_node("chess_waypoint_system")
     chess_waypoint_system = ChessWaypointSystem()
     rospy.spin()
+    ser.close()
 
 if __name__ == "__main__":
     main()
