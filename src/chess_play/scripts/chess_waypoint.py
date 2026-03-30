@@ -102,11 +102,12 @@ class ChessWaypointSystem:
         rospy.loginfo(f"Moving from {from_square} to {to_square}")
         rospy.loginfo(f"From square joint angles: {self._board_positions[from_square]['joint_angles']}")
         rospy.loginfo(f"To square joint angles: {self._board_positions[to_square]['joint_angles']}")
+        
         self._send_single_waypoint(self._board_positions[from_square]['joint_angles']) # go to original piece square
-        self._pick(piece=piece, square=from_square) # pick up piece
+        self._pick(piece=piece, square=from_square, prev_pos=self._board_positions[from_square]['joint_angles']) # pick up piece
         self._send_single_waypoint(self._board_positions['base']['joint_angles']) # move to base position
         self._send_single_waypoint(self._board_positions[to_square]['joint_angles']) # go to new piece square
-        self._pick(piece=piece, square=to_square, release=True) # release piece
+        self._pick(piece=piece, square=to_square, prev_pos=self._board_positions[to_square]['joint_angles'], release=True) # release piece
         self._send_single_waypoint(self._board_positions['base']['joint_angles']) # move to base position
         self._send_single_waypoint(self._board_positions['away']['joint_angles']) # move to position away from camera
 
@@ -118,17 +119,20 @@ class ChessWaypointSystem:
         :param piece: the type of chess piece being discarded (e.g., 'pawn', 'rook', 'knight', 'bishop', 'queen', 'king')
         """
         self._send_single_waypoint(self._board_positions[square]['joint_angles']) # go to piece square
-        self._pick(piece=piece, square=square) # pick up piece
+        self._pick(piece=piece, square=square, prev_pos=self._board_positions[square]['joint_angles']) # pick up piece
         self._send_single_waypoint(self._board_positions['discard']['joint_angles']) # go to discard position
-        self._pick(piece=piece, square="discard", release=True) # release piece
+        self._pick(piece=piece, square="discard", prev_pos=self._board_positions['discard']['joint_angles'], release=True) # release piece
 
-    def _pick(self, square, piece, current_pos=None, release=False):
+    def _pick(self, square, piece, prev_pos, release=False):
         """
         Lower or raise the end effector by a pre-determined amount based on the piece type and provides the option to grasp or release the piece.
         
         :param piece: the type of chess piece being manipulated (e.g., 'pawn', 'rook', 'knight', 'bishop', 'queen', 'king')
         :param release: whether to lower and grab the piece (False) or to lower and release the piece (True), defaults to False
         """
+        joint_keys = ['right_j0', 'right_j1', 'right_j2', 'right_j3', 'right_j4', 'right_j5', 'right_j6']
+        ik_seed = dict(zip(joint_keys, prev_pos))
+        
         square_point = self._board_positions[square]['position']
         pick_pose = Pose()
         pick_point = Point()
@@ -144,7 +148,7 @@ class ChessWaypointSystem:
             w=ori['w']
         )
 
-        joint_solution = self._limb.ik_request(pick_pose)
+        joint_solution = self._limb.ik_request(pick_pose, seed=ik_seed)
         if joint_solution:
             angles = list(joint_solution.values())
             rospy.loginfo(f"IK joint angles used: {angles}")
@@ -152,10 +156,8 @@ class ChessWaypointSystem:
         else:
             rospy.logerr("No IK solution found for pick pose of piece %s at square %s", piece, square)
         if release:
-        #     # turn magnet off to release piece
             magnet_off()
         else:
-        #     # turn magnet on to grasp piece
             magnet_on()
         pick_point.z = square_point['z'] + piece_heights[piece]
         joint_solution = self._limb.ik_request(pick_pose, seed=joint_solution)
