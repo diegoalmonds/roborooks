@@ -103,13 +103,16 @@ class ChessWaypointSystem:
         rospy.loginfo(f"From square joint angles: {self._board_positions[from_square]['joint_angles']}")
         rospy.loginfo(f"To square joint angles: {self._board_positions[to_square]['joint_angles']}")
         
-        self._send_single_waypoint(self._board_positions[from_square]['joint_angles']) # go to original piece square
-        self._pick(piece=piece, square=from_square, prev_pos=self._board_positions[from_square]['joint_angles']) # pick up piece
-        self._send_single_waypoint(self._board_positions['base']['joint_angles']) # move to base position
-        self._send_single_waypoint(self._board_positions[to_square]['joint_angles']) # go to new piece square
-        self._pick(piece=piece, square=to_square, prev_pos=self._board_positions[to_square]['joint_angles'], release=True) # release piece
-        self._send_single_waypoint(self._board_positions['base']['joint_angles']) # move to base position
-        self._send_single_waypoint(self._board_positions['away']['joint_angles']) # move to position away from camera
+        # START SQUARE
+        self._send_single_waypoint(self._board_positions[from_square]['joint_angles'])
+        self._pick(piece=piece, square=from_square, prev_pos=self._board_positions[from_square]['joint_angles'])
+
+        # END SQUARE
+        self._send_single_waypoint(self._board_positions[to_square]['joint_angles'])
+        self._pick(piece=piece, square=to_square, prev_pos=self._board_positions[to_square]['joint_angles'], release=True)
+
+        # RESET
+        self._send_single_waypoint(self._board_positions['away']['joint_angles'])
 
     def _discard(self, square, piece):
         """
@@ -118,10 +121,11 @@ class ChessWaypointSystem:
         :param square: the square from which the piece is being discarded (e.g., 'e4')
         :param piece: the type of chess piece being discarded (e.g., 'pawn', 'rook', 'knight', 'bishop', 'queen', 'king')
         """
-        self._send_single_waypoint(self._board_positions[square]['joint_angles']) # go to piece square
-        self._pick(piece=piece, square=square, prev_pos=self._board_positions[square]['joint_angles']) # pick up piece
-        self._send_single_waypoint(self._board_positions['discard']['joint_angles']) # go to discard position
-        self._pick(piece=piece, square="discard", prev_pos=self._board_positions['discard']['joint_angles'], release=True) # release piece
+        
+        self._send_single_waypoint(self._board_positions[square]['joint_angles'])
+        self._pick(piece=piece, square=square, prev_pos=self._board_positions[square]['joint_angles'])
+        self._send_single_waypoint(self._board_positions['discard']['joint_angles'])
+        self._pick(piece=piece, square="discard", prev_pos=self._board_positions['discard']['joint_angles'], release=True)
 
     def _pick(self, square, piece, prev_pos, release=False):
         """
@@ -129,17 +133,21 @@ class ChessWaypointSystem:
         
         :param piece: the type of chess piece being manipulated (e.g., 'pawn', 'rook', 'knight', 'bishop', 'queen', 'king')
         :param release: whether to lower and grab the piece (False) or to lower and release the piece (True), defaults to False
+        :param prev_pos: the joint angles of the previous position, used as the seed for IK calculations to ensure more consistent solutions
         """
+        
+        # create joint dictionary for IK seed
         joint_keys = ['right_j0', 'right_j1', 'right_j2', 'right_j3', 'right_j4', 'right_j5', 'right_j6']
         ik_seed = dict(zip(joint_keys, prev_pos))
         
-        square_point = self._board_positions[square]['position']
+        pos = self._board_positions[square]['position']
         pick_pose = Pose()
-        pick_point = Point()
-        pick_point.x = square_point['x']
-        pick_point.y = square_point['y']
-        pick_point.z = square_point['z'] - piece_heights[piece] - (square_point['z'] - .36) # subtract .36 as baseline height
-        pick_pose.position = pick_point
+        pick_pose.position = Point(
+            x = pos['x'],
+            y = pos['y'],
+            z = pos['z'] - piece_heights[piece] - (pos['z'] - .36) # subtract .36 as baseline height
+        )
+        
         ori = self._board_positions[square]['orientation']
         pick_pose.orientation = Quaternion(
             x=ori['x'],
@@ -148,27 +156,32 @@ class ChessWaypointSystem:
             w=ori['w']
         )
 
-        joint_solution = self._limb.ik_request(pick_pose, seed=ik_seed)
+        joint_solution = self._limb.ik_request(pick_pose, seed=ik_seed) # use previous joint angles as seed for IK
         if joint_solution:
             angles = list(joint_solution.values())
-            rospy.loginfo(f"IK joint angles used: {angles}")
             self._send_single_waypoint(angles = angles)
         else:
             rospy.logerr("No IK solution found for pick pose of piece %s at square %s", piece, square)
+        
+        # toggle magnet based on pick or release 
         if release:
             magnet_off()
         else:
             magnet_on()
-        pick_point.z = square_point['z'] + piece_heights[piece]
-        joint_solution = self._limb.ik_request(pick_pose, seed=joint_solution)
+        
+        # raise end effector back up after pick/release
+        pick_pose.position.z = pos['z']
+        joint_solution = self._limb.ik_request(pick_pose, seed=joint_solution) # use previous joint solution as seed for raised pose
         if joint_solution:
             self._send_single_waypoint(angles = list(joint_solution.values()))
         else:
             rospy.logerr("No IK solution found for raised pose of piece %s at square %s", piece, square)
-        self._send_single_waypoint(self._board_positions['base']['joint_angles']) # move to base position after pick/release
+            
+        # RESET  
+        self._send_single_waypoint(self._board_positions['base']['joint_angles'])
 
     def _promote(self, from_square, to_square, from_piece, promotion_piece):
-        self._move(from_square=from_square, to_square=to_square, from_piece=from_piece, piece="p") # move pawn to promotion square
+        self._move(from_square=from_square, to_square=to_square, from_piece=from_piece, piece="P") # move pawn to promotion square
         self._discard(square=to_square, piece="P") # discard pawn
         self._move(from_square=promotion_piece + "_promote", to_square=to_square, piece=promotion_piece) # move promotion piece to promotion square
 
