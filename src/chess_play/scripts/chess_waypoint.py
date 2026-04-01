@@ -171,7 +171,8 @@ class ChessWaypointSystem:
         
         # raise end effector back up after pick/release
         pick_pose.position.z = pos['z']
-        joint_solution = self._limb.ik_request(pick_pose, seed=joint_solution) # use previous joint solution as seed for raised pose
+        ik_seed = dict(zip(joint_keys, joint_solution.values()))
+        joint_solution = self._limb.ik_request(pick_pose, seed=ik_seed) # use previous joint solution as seed for raised pose
         if joint_solution:
             self._send_single_waypoint(angles = list(joint_solution.values()))
         else:
