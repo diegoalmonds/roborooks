@@ -75,33 +75,24 @@ class ChessWaypointSystem:
         from_piece = msg.from_piece.upper()
         to_piece = msg.to_piece.upper()
         promotion = msg.promotion_piece
+        checkmate = msg.is_checkmate
         rospy.loginfo(f"Executing move: {move_notation}")
-        if 'checkmate' == move_type:
-            self._checkmate()
-        elif 'capture' == move_type: # capture
+        if move_type == 'capture':
             self._discard(square=to_square, piece=to_piece)
             self._move(from_square=from_square, to_square=to_square, piece=from_piece)
-        elif "promotion" == move_type:
+        elif move_type == 'promotion':
             self._promote(from_square=from_square, to_square=to_square, from_piece=from_piece, promotion_piece=promotion)
         else: # castle or regular move
-            self._move(from_square=from_square, to_square=to_square, piece=from_piece)
-        rospy.loginfo("Sending trajectory now...")
-        rospy.loginfo(f"Trajectory object: {self._traj}")
-        move = self._traj.send_trajectory()
-        if move is None:
-            rospy.loginfo(f"Move executed returned None for: {move_notation}")
-        elif move.result:
-            rospy.loginfo(f"Successfully executed move: {move_notation}")
-        else:
-            rospy.loginfo(f"Failed to execute move: {move_notation}")
+            self._move(from_square=from_square, to_square=to_square, piece=from_piece)        
         
         self._traj.clear_waypoints()
-
+        
+        if checkmate:
+            rospy.loginfo("Checkmate detected.")
+            rospy.signal_shutdown("CHECKMATE - shutting down waypoint system.")
 
     def _move(self, from_square, to_square, piece):
-        rospy.loginfo(f"Moving from {from_square} to {to_square}")
-        rospy.loginfo(f"From square joint angles: {self._board_positions[from_square]['joint_angles']}")
-        rospy.loginfo(f"To square joint angles: {self._board_positions[to_square]['joint_angles']}")
+        rospy.loginfo(f"MOVE - from {from_square} to {to_square}")
         
         # START SQUARE
         angles = self._send_single_waypoint(square=from_square)
@@ -121,6 +112,7 @@ class ChessWaypointSystem:
         :param square: the square from which the piece is being discarded (e.g., 'e4')
         :param piece: the type of chess piece being discarded (e.g., 'pawn', 'rook', 'knight', 'bishop', 'queen', 'king')
         """
+        rospy.loginfo(f"DISCARD - piece {piece} at square {square}")
         
         angles = self._send_single_waypoint(square=square)
         self._pick(piece=piece, square=square, prev_pos=angles)
@@ -131,11 +123,12 @@ class ChessWaypointSystem:
         """
         Lower or raise the end effector by a pre-determined amount based on the piece type and provides the option to grasp or release the piece.
         
+        :param square: the square at which the piece is located (e.g., 'e4')
         :param piece: the type of chess piece being manipulated (e.g., 'pawn', 'rook', 'knight', 'bishop', 'queen', 'king')
         :param release: whether to lower and grab the piece (False) or to lower and release the piece (True), defaults to False
         :param prev_pos: the joint angles of the previous position, used as the seed for IK calculations to ensure more consistent solutions
         """
-        
+        rospy.loginfo(f"PICK -  { 'releasing' if release else 'grabbing' } piece {piece} at square {square}")
         # create joint dictionary for IK seed
         joint_keys = ['right_j0', 'right_j1', 'right_j2', 'right_j3', 'right_j4', 'right_j5', 'right_j6']
         ik_seed = dict(zip(joint_keys, prev_pos))
@@ -186,24 +179,9 @@ class ChessWaypointSystem:
         self._discard(square=to_square, piece="P") # discard pawn
         self._move(from_square=promotion_piece + "_promote", to_square=to_square, piece=promotion_piece) # move promotion piece to promotion square
 
-    def _checkmate(self):
+    def _checkmate(self, from_square=None, to_square=None, piece=None):
         # define checkmate sequence of waypoints here
         pass
-
-    # add type checking logic (is of type Pose, or type list with 7 joint angles?)
-    def _append_waypoint(self, angles):
-        rospy.loginfo(f"Appending waypoint with angles: {angles}")
-
-        if angles is None:
-            rospy.logerr("Waypoint angles are None!")
-            return
-
-        if len(angles) != 7:
-            rospy.logerr(f"Invalid joint angle length: {len(angles)} (expected 7)")
-            return
-        
-        self._wpt.set_joint_angles(joint_angles = angles)
-        self._traj.append_waypoint(self._wpt)
 
     def _send_single_waypoint(self, square=None, angles=None, pause=0.5):
         rospy.loginfo(f"Sending single waypoint for position: {square}")
