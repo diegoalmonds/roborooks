@@ -51,7 +51,7 @@ class ChessWaypointSystem:
         self._board_positions = self._load_yaml()
 
         self._limb = intera_interface.Limb()
-        self._current_angles = self._limb.joint_angles()
+        self._current_angles = self._limb.joint_angles().values()
         print("Current joint angles:", self._current_angles)
         self._wpt_opts = MotionWaypointOptions(max_joint_speed_ratio = 0.4)
         self._ai_move_sub = rospy.Subscriber(
@@ -86,9 +86,7 @@ class ChessWaypointSystem:
             self._promote(from_square=from_square, to_square=to_square, from_piece=from_piece, promotion_piece=promotion)
         else: # castle or regular move
             self._move(from_square=from_square, to_square=to_square, piece=from_piece)        
-        
-        self._traj.clear_waypoints()
-        
+                
         if checkmate:
             rospy.loginfo("Checkmate detected.")
             rospy.signal_shutdown("CHECKMATE - shutting down waypoint system.")
@@ -206,10 +204,10 @@ class ChessWaypointSystem:
                 z=ori['z'],
                 w=ori['w']
             )
-
-            joint_solution = self._limb.ik_request(waypoint_pose, joint_seed=self._current_angles)
+            
+            ik_seed = dict(zip(JOINT_KEYS, self._current_angles))
+            joint_solution = self._limb.ik_request(waypoint_pose, joint_seed=ik_seed)
             if joint_solution:
-                self._current_angles = angles
                 angles = list(joint_solution.values())
             else:
                 rospy.logerr("No IK solution found for pose at square %s", square)
@@ -221,6 +219,7 @@ class ChessWaypointSystem:
         traj.append_waypoint(wpt)
 
         result = traj.send_trajectory()
+        self._current_angles = angles
 
         if result is None:
             rospy.logerr("Trajectory execution returned None")
