@@ -207,7 +207,7 @@ def publish_ai_move(move, board):
         from_position, to_position = move.split('x')
         ai_move.from_square = from_position[1:3] if len(from_position) > 2 else from_position
         ai_move.from_piece = from_position[0] if len(from_position) > 2 else "P"
-        ai_move.to_square = to_position
+        ai_move.to_square = to_position[0:2]
         check_piece = board.piece_at(chess.parse_square(ai_move.to_square))
         ai_move.to_piece = check_piece.symbol().lower() if check_piece else ""
         if '=' in move:
@@ -226,7 +226,7 @@ def publish_ai_move(move, board):
         from_position, to_position = move.split('-')
         ai_move.from_square = from_position[1:3] if len(from_position) > 2 else from_position
         ai_move.from_piece = from_position[0] if len(from_position) > 2 else "p"
-        ai_move.to_square = to_position
+        ai_move.to_square = to_position[0:2]
         check_piece = board.piece_at(chess.parse_square(ai_move.to_square))
         ai_move.to_piece = check_piece.symbol().lower() if check_piece else ""
         
@@ -644,6 +644,7 @@ try:
             result = engine.play(board, chess.engine.Limit(time=random.uniform(0.4, 0.9)))
             mv = result.move
             lan_move = board.lan(mv)
+            print(f"LAN MOVE: {lan_move}")
             publish_ai_move(move = lan_move, board=board)
             board.push(mv)
             move_history.append(mv)
