@@ -175,28 +175,29 @@ def draw_contours_debug(frame, contours):
 
 def publish_ai_move(move, board):
     ai_move = Move()
-    if 'O' in move: # castle
+    ai_move.is_checkmate = board.is_checkmate()
+    if 'O' in move: # castle (PROBABLY BROKEN BC LAN NOTATION FOR CASTLE IS DIFFERENT)
         ai_move.move_type = "castle"
         if move == "O-O":
             ai_move.from_square = "e1" if board.turn == chess.WHITE else "e8"
-            ai_move.from_piece = "king"
+            ai_move.from_piece = "K"
             ai_move.to_square = "g1" if board.turn == chess.WHITE else "g8"
             ai_move.to_piece = ""
             move_pub.publish(ai_move) # king move first
             ai_move.from_square = "h1" if board.turn == chess.WHITE else "h8"
-            ai_move.from_piece = "rook"
+            ai_move.from_piece = "R"
             ai_move.to_square = "f1" if board.turn == chess.WHITE else "f8"
             ai_move.to_piece = ""
             move_pub.publish(ai_move) # then rook move
             return
         else:
             ai_move.from_square = "e1" if board.turn == chess.WHITE else "e8"
-            ai_move.from_piece = "king"
+            ai_move.from_piece = "K"
             ai_move.to_square = "c1" if board.turn == chess.WHITE else "c8"
             ai_move.to_piece = ""
             move_pub.publish(ai_move) # king move first
             ai_move.from_square = "a1" if board.turn == chess.WHITE else "a8"
-            ai_move.from_piece = "rook"
+            ai_move.from_piece = "R"
             ai_move.to_square = "d1" if board.turn == chess.WHITE else "d8"
             ai_move.to_piece = ""
             move_pub.publish(ai_move) # then rook move
@@ -205,7 +206,7 @@ def publish_ai_move(move, board):
         ai_move.move_type = "capture"
         from_position, to_position = move.split('x')
         ai_move.from_square = from_position[1:3] if len(from_position) > 2 else from_position
-        ai_move.from_piece = from_position[0] if len(from_position) > 2 else "p"
+        ai_move.from_piece = from_position[0] if len(from_position) > 2 else "P"
         ai_move.to_square = to_position
         check_piece = board.piece_at(chess.parse_square(ai_move.to_square))
         ai_move.to_piece = check_piece.symbol().lower() if check_piece else ""
@@ -216,7 +217,7 @@ def publish_ai_move(move, board):
         from_position, to_position = move.split('-')
         to_position, promotion = to_position.split('=')
         ai_move.from_square = from_position[1:3] if len(from_position) > 2 else from_position
-        ai_move.from_piece = "p"
+        ai_move.from_piece = "P"
         ai_move.to_square = to_position
         ai_move.to_piece = ""
         ai_move.promotion_piece = promotion
