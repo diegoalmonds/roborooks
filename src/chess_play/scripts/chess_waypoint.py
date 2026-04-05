@@ -16,7 +16,7 @@ from intera_motion_interface import (
 from geometry_msgs.msg import Pose, Point, Quaternion
 from board_cv.msg import Move
 
-piece_heights = {
+PIECE_HEIGHTS = {
     'P': 0.067,
     'R': 0.059,
     'N': 0.045,
@@ -77,14 +77,32 @@ class ChessWaypointSystem:
         from_piece = msg.from_piece.upper()
         to_piece = msg.to_piece.upper()
         promotion = msg.promotion_piece
+        is_white_turn = msg.is_white_turn
         checkmate = msg.is_checkmate
         rospy.loginfo(f"Executing move: {move_notation}")
-        if move_type == 'capture':
-            self._discard(square=to_square, piece=to_piece)
-            self._move(from_square=from_square, to_square=to_square, piece=from_piece)
+        if move_type == 'castle_kingside':
+            if is_white_turn:
+                self._move()
+                self._move()
+            else:
+                self._move()
+                self._move()
+        elif move_type == 'castle_queenside':
+            if is_white_turn:
+                self._move()
+                self._move()
+            else:
+                self._move()
+                self._move()
+        elif move_type == 'capture_promotion':
+            self._discard(square=to_square)
+            self._promote()
         elif move_type == 'promotion':
             self._promote(from_square=from_square, to_square=to_square, from_piece=from_piece, promotion_piece=promotion)
-        else: # castle or regular move
+        elif move_type == 'capture':
+            self._discard(square=to_square, piece=to_piece)
+            self._move(from_square=from_square, to_square=to_square, piece=from_piece)
+        elif move_type == 'move':
             self._move(from_square=from_square, to_square=to_square, piece=from_piece)        
                 
         if checkmate:
@@ -137,7 +155,7 @@ class ChessWaypointSystem:
         pick_pose.position = Point(
             x = pos['x'],
             y = pos['y'],
-            z = pos['z'] - piece_heights[piece] - (pos['z'] - .36) # subtract .36 as baseline height
+            z = pos['z'] - PIECE_HEIGHTS[piece] - (pos['z'] - .36) # subtract .36 as baseline height
         )
         ori = self._board_positions[square]['orientation']
         pick_pose.orientation = Quaternion(
@@ -181,10 +199,6 @@ class ChessWaypointSystem:
         self._move(from_square=from_square, to_square=to_square, from_piece=from_piece, piece="P") # move pawn to promotion square
         self._discard(square=to_square, piece="P")
         self._move(from_square=promotion_piece + "_promote", to_square=to_square, piece=promotion_piece) # move promotion piece to promotion square
-
-    def _checkmate(self, from_square=None, to_square=None, piece=None):
-        # define checkmate sequence of waypoints here
-        pass
 
     def _send_single_waypoint(self, square=None, angles=None, pause=0.5):
         rospy.loginfo(f"Sending single waypoint for position: {square}")

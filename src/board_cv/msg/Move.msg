@@ -5,4 +5,5 @@ string to_square
 string to_piece
 string move_type
 string promotion_piece
+bool is_white_turn
 bool is_checkmate

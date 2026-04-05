@@ -15,6 +15,7 @@ import sys
 import cairosvg
 import time
 import rospy
+import re
 
 from board_cv.msg import Move
 
@@ -69,7 +70,7 @@ def remap_square(square_name: str) -> str:
     else:
         return square_name
 
-# === HELPERS ===
+# === CV HELPERS ===
 def poly_center(pts):
     a = np.array(pts, np.int32)
     M = cv2.moments(a)
@@ -173,65 +174,74 @@ def draw_contours_debug(frame, contours):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
     return dbg
 
+# === PUBLISH HELPERS ===
 def publish_ai_move(move, board):
     ai_move = Move()
+    move_type = get_move_type(move)
+    ai_move.move_type = move_type
+    ai_move.is_white_turn = True if board.turn == chess.WHITE else False
     ai_move.is_checkmate = board.is_checkmate()
-    if 'O' in move: # castle (PROBABLY BROKEN BC LAN NOTATION FOR CASTLE IS DIFFERENT)
-        ai_move.move_type = "castle"
-        if move == "O-O":
-            ai_move.from_square = "e1" if board.turn == chess.WHITE else "e8"
-            ai_move.from_piece = "K"
-            ai_move.to_square = "g1" if board.turn == chess.WHITE else "g8"
-            ai_move.to_piece = ""
-            move_pub.publish(ai_move) # king move first
-            ai_move.from_square = "h1" if board.turn == chess.WHITE else "h8"
-            ai_move.from_piece = "R"
-            ai_move.to_square = "f1" if board.turn == chess.WHITE else "f8"
-            ai_move.to_piece = ""
-            move_pub.publish(ai_move) # then rook move
-            return
-        else:
-            ai_move.from_square = "e1" if board.turn == chess.WHITE else "e8"
-            ai_move.from_piece = "K"
-            ai_move.to_square = "c1" if board.turn == chess.WHITE else "c8"
-            ai_move.to_piece = ""
-            move_pub.publish(ai_move) # king move first
-            ai_move.from_square = "a1" if board.turn == chess.WHITE else "a8"
-            ai_move.from_piece = "R"
-            ai_move.to_square = "d1" if board.turn == chess.WHITE else "d8"
-            ai_move.to_piece = ""
-            move_pub.publish(ai_move) # then rook move
-            return
-    elif 'x' in move: # capture
-        ai_move.move_type = "capture"
+    if "castle" in move_type:
+        # === HANDLE MOVE IN WAYPOINT ===
+        move_pub.publish(ai_move)
+    elif move_type == "capture_promotion":
+        chess_move, promotion_info = move.split('=')
+        from_position, to_position = chess_move.split('x')
+        ai_move.from_square = from_position[1:3] if len(from_position) > 2 else from_position
+        ai_move.from_piece = from_position[0] if len(from_position) > 2 else "P"
+        ai_move.to_square = to_position[0:2]
+        check_piece = board.piece_at(chess.parse_square(ai_move.to_square))
+        ai_move.to_piece = check_piece.symbol().lower() if check_piece else ""
+        ai_move.promotion_piece = promotion_info[0].upper()
+    elif move_type == "promotion":
+        chess_move, promotion_info = move.split('=')
+        from_position, to_position = chess_move.split('-')
+        ai_move.from_square = from_position[1:3] if len(from_position) > 2 else from_position
+        ai_move.from_piece = "P"
+        ai_move.to_square = to_position
+        ai_move.promotion_piece = promotion_info[0].upper()
+    elif move_type == "capture":
         from_position, to_position = move.split('x')
         ai_move.from_square = from_position[1:3] if len(from_position) > 2 else from_position
         ai_move.from_piece = from_position[0] if len(from_position) > 2 else "P"
         ai_move.to_square = to_position[0:2]
         check_piece = board.piece_at(chess.parse_square(ai_move.to_square))
         ai_move.to_piece = check_piece.symbol().lower() if check_piece else ""
-        if '=' in move:
-            ai_move.promotion_piece = move.split('=')[1]
-    elif '=' in move: # promotion
-        ai_move.move_type = "promotion"
-        from_position, to_position = move.split('-')
-        to_position, promotion = to_position.split('=')
-        ai_move.from_square = from_position[1:3] if len(from_position) > 2 else from_position
-        ai_move.from_piece = "P"
-        ai_move.to_square = to_position
-        ai_move.to_piece = ""
-        ai_move.promotion_piece = promotion
-    elif '-' in move: # normal move
-        ai_move.move_type = "move"
+    elif move_type == "move":
         from_position, to_position = move.split('-')
         ai_move.from_square = from_position[1:3] if len(from_position) > 2 else from_position
         ai_move.from_piece = from_position[0] if len(from_position) > 2 else "p"
-        ai_move.to_square = to_position[0:2]
-        check_piece = board.piece_at(chess.parse_square(ai_move.to_square))
-        ai_move.to_piece = check_piece.symbol().lower() if check_piece else ""
-        
+        ai_move.to_square = to_position[0:2]        
     ai_move.notation = move
     move_pub.publish(ai_move)
+    
+def get_move_type(lan):
+    """
+    Identifies the type of move from a LAN notation string.
+    Returns a string describing the move type.
+    """
+    
+    # Castling: king moves exactly e1g1, e1c1, e8g8, e8c8
+    if re.match(r'^e[18]-[gc][18][+#]?$', lan):
+        side = "kingside" if lan[2] == 'g' else "queenside"
+        return f"castle_{side}"
+    
+    # Promotion (with or without capture)
+    if '=' in lan:
+        if 'x' in lan:
+            return "capture_promotion"
+        return "promotion"
+    
+    # Capture (includes en passant — indistinguishable in LAN)
+    if 'x' in lan:
+        return "capture"
+    
+    # Quiet move
+    if '-' in lan:
+        return "move"
+    
+    return "unknown"
+    
 
 # === CAMERA ===
 pipe = rs.pipeline()
