@@ -192,14 +192,14 @@ def publish_ai_move(move, board):
         ai_move.to_square = to_position[0:2]
         check_piece = board.piece_at(chess.parse_square(ai_move.to_square))
         ai_move.to_piece = check_piece.symbol().lower() if check_piece else ""
-        ai_move.promotion_piece = promotion_info[0].upper()
+        ai_move.promotion_piece = promotion_info[0]
     elif move_type == "promotion":
         chess_move, promotion_info = move.split('=')
         from_position, to_position = chess_move.split('-')
         ai_move.from_square = from_position[1:3] if len(from_position) > 2 else from_position
         ai_move.from_piece = "P"
         ai_move.to_square = to_position
-        ai_move.promotion_piece = promotion_info[0].upper()
+        ai_move.promotion_piece = promotion_info[0]
     elif move_type == "capture":
         from_position, to_position = move.split('x')
         ai_move.from_square = from_position[1:3] if len(from_position) > 2 else from_position

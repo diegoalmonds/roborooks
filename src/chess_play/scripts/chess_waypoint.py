@@ -76,27 +76,27 @@ class ChessWaypointSystem:
         to_square = msg.to_square
         from_piece = msg.from_piece.upper()
         to_piece = msg.to_piece.upper()
-        promotion = msg.promotion_piece
+        promotion = msg.promotion_piece.upper()
         is_white_turn = msg.is_white_turn
         checkmate = msg.is_checkmate
         rospy.loginfo(f"Executing move: {move_notation}")
         if move_type == 'castle_kingside':
             if is_white_turn:
-                self._move()
-                self._move()
+                self._move(from_square="e1", to_square="g1", piece="K")
+                self._move(from_square="h1", to_square="f1", piece="R")
             else:
-                self._move()
-                self._move()
+                self._move(from_square="e8", to_square="g8", piece="K")
+                self._move(from_square="h8", to_square="f8", piece="R")
         elif move_type == 'castle_queenside':
             if is_white_turn:
-                self._move()
-                self._move()
+                self._move(from_square="e1", to_square="c1", piece="K")
+                self._move(from_square="a1", to_square="d1", piece="R")
             else:
-                self._move()
-                self._move()
+                self._move(from_square="e8", to_square="c8", piece="K")
+                self._move(from_square="a8", to_square="d8", piece="R")
         elif move_type == 'capture_promotion':
-            self._discard(square=to_square)
-            self._promote()
+            self._discard(square=to_square, piece=to_piece)
+            self._promote(from_square=from_square, to_square=to_square, from_piece=from_piece, promotion_piece=promotion)
         elif move_type == 'promotion':
             self._promote(from_square=from_square, to_square=to_square, from_piece=from_piece, promotion_piece=promotion)
         elif move_type == 'capture':
