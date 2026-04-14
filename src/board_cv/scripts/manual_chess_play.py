@@ -221,7 +221,7 @@ try:
                 
         # === Redo 1 move ===
         if key == ord('r'):
-            if undo_history:
+            if len(undo_history) != 0:
                 mv = undo_history.pop()
                 board.push(mv)
                 move_history.append(mv)
