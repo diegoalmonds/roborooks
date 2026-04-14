@@ -57,6 +57,13 @@ def get_move():
     file2 = get_input("To file (a-h): ")
     rank2 = get_input("To rank (1-8): ")
     return file1 + rank1 + file2 + rank2
+
+def get_move_type():
+    val = input("Move type (regular move / castle ):")
+    if val == 'r':
+        return "regular"
+    elif val == 'c':
+        return "castle"
     
 def show_board(board, last_move=None):
     svg = chess.svg.board(board=board, lastmove=last_move, coordinates=True, size=450)
@@ -142,7 +149,53 @@ try:
 
         # === Input player move ===
         if key == ord('f'):
+            move_type = get_move_type()
+            if move_type == "regular":
+                player_move = get_move()
+                from_sq = player_move[0:2]
+                to_sq = player_move[2:]
             
+                prev_board = board.copy()
+
+                piece_a = prev_board.piece_at(chess.parse_square(from_sq))
+                piece_b = prev_board.piece_at(chess.parse_square(to_sq[:2])) # in case of promotion, to_sq might have 3 chars like e8q, so we only want the square part
+                
+                if from_sq and to_sq:
+                    move = from_sq + to_sq
+                    try:
+                        mv = chess.Move.from_uci(move)
+                        lan_move = board.lan(mv)
+                        if mv in board.legal_moves:
+                            publish_robot_move(move = lan_move, board=board)
+                            board.push(mv)
+                            move_history.append(mv)
+                            last_move = mv
+                            print(f"[YOU] You played: {move}")
+                            show_board(board, last_move)
+                        else:
+                            print(f"[!] Invalid move: {move}")
+                    except Exception as e:
+                        print(f"[!] Error interpreting move: {e}")
+                comp_turn = True
+            elif move_type == "castle":
+                player_move = get_move()
+                if player_move == "O-O" or player_move == "O-O-O":
+                    move = player_move
+                    try:
+                        if mv in board.legal_moves:
+                            publish_robot_move(move = move, board=board)
+                            board.push(mv)
+                            move_history.append(mv)
+                            last_move = mv
+                            print(f"[YOU] You castled: {move}")
+                            show_board(board, last_move)
+                        else:
+                            print(f"[!] Invalid castle move: {move}")
+                    except Exception as e:
+                        print(f"[!] Error interpreting castle move: {e}")
+                else:
+                    print(f"[!] Invalid input for castle. Please enter 'O-O' or 'O-O-O'.")
+                comp_turn = True
         
         # === Undo 1 move ===
         if key == ord('u'):
@@ -195,33 +248,6 @@ try:
             print(f"[AI] Computer played: {mv.uci()}")
             show_board(board, last_move)
             comp_turn = False
-        else:
-            player_move = input("Enter your move (e.g. e2e4): ")
-            from_sq = player_move[0:2]
-            to_sq = player_move[2:]
-            
-            prev_board = board.copy()
-
-            piece_a = prev_board.piece_at(chess.parse_square(from_sq))
-            piece_b = prev_board.piece_at(chess.parse_square(to_sq[:2])) # in case of promotion, to_sq might have 3 chars like e8q, so we only want the square part
-            
-            if from_sq and to_sq:
-                move = from_sq + to_sq
-                try:
-                    mv = chess.Move.from_uci(move)
-                    lan_move = board.lan(mv)
-                    if mv in board.legal_moves:
-                        publish_robot_move(move = lan_move, board=board)
-                        board.push(mv)
-                        move_history.append(mv)
-                        last_move = mv
-                        print(f"[YOU] You played: {move}")
-                        show_board(board, last_move)
-                    else:
-                        print(f"[!] Invalid move: {move}")
-                except Exception as e:
-                    print(f"[!] Error interpreting move: {e}")
-            comp_turn = True
 
     print("[INFO] Game over.")
 finally:
