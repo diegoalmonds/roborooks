@@ -23,7 +23,6 @@ move_pub = rospy.Publisher("/ai_move", Move, queue_size=10)
 # === CONFIG ===
 CALIB_JSON = "sqdict.json"
 ENGINE_PATH = r"/usr/games/stockfish"
-BOARD_ORIENTATION = "TOP"  # "TOP", "BOTTOM", "SIDE_L", "SIDE_R"
 
 # === ENGINE ===
 if not os.path.exists(ENGINE_PATH):
@@ -47,23 +46,18 @@ print(f"[INFO] Loaded {len(sq_points)} squares from {CALIB_JSON}")
 files = 'abcdefgh'
 ranks = '12345678'
 
-def remap_square(square_name: str) -> str:
-    f = square_name[0]
-    r = square_name[1]
-    fi = files.index(f)
-    ri = ranks.index(r)
-    if BOARD_ORIENTATION == "TOP":
-        return square_name
-    elif BOARD_ORIENTATION == "BOTTOM":
-        return f"{files[7 - fi]}{ranks[7 - ri]}"
-    elif BOARD_ORIENTATION == "SIDE_L":
-        return f"{files[ri]}{ranks[7 - fi]}"
-    elif BOARD_ORIENTATION == "SIDE_R":
-        return f"{files[7 - ri]}{ranks[fi]}"
-    else:
-        return square_name
-
 # === HELPERS ===
+def get_input(prompt):
+    val = input(prompt)
+    return val
+
+def get_move():
+    file1 = get_input("From file (a-h): ")
+    rank1 = get_input("From rank (1-8): ")
+    file2 = get_input("To file (a-h): ")
+    rank2 = get_input("To rank (1-8): ")
+    return file1 + rank1 + file2 + rank2
+    
 def show_board(board, last_move=None):
     svg = chess.svg.board(board=board, lastmove=last_move, coordinates=True, size=450)
     png_data = cairosvg.svg2png(bytestring=svg.encode('utf-8'))
@@ -132,8 +126,6 @@ def publish_robot_move(move, board):
     ai_move.notation = move
     move_pub.publish(ai_move)
 
-
-
 # === CHESS BOARD SETUP ===
 board = chess.Board()
 last_move = None
@@ -148,6 +140,10 @@ try:
     while not board.is_game_over():
         key = cv2.waitKey(1) & 0xFF # maybe?
 
+        # === Input player move ===
+        if key == ord('f'):
+            
+        
         # === Undo 1 move ===
         if key == ord('u'):
             if move_history:
@@ -169,7 +165,8 @@ try:
                 show_board(board)
             else:
                 print("[INFO] Not enough moves to undo 2 times.")
-
+                
+        # === Redo 1 move ===
         if key == ord('r'):
             if undo_history:
                 mv = undo_history.pop()
@@ -180,6 +177,7 @@ try:
             else:
                 print("[INFO] No moves to redo.")
         
+        # === Exit script ===
         if key == ord('q'):
             print("[INFO] Quitting.")
             break
@@ -223,6 +221,7 @@ try:
                         print(f"[!] Invalid move: {move}")
                 except Exception as e:
                     print(f"[!] Error interpreting move: {e}")
+            comp_turn = True
 
     print("[INFO] Game over.")
 finally:
