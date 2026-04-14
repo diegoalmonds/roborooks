@@ -248,7 +248,7 @@ except Exception as e:
 board = chess.Board()
 ref_frame = None
 last_move = None
-comp_turn = False
+comp_turn = False # if True, robot plays white, else robot plays black
 move_history = []
 
 print("[INFO] Press 'r' twice to register a move, 'u'=undo, 'U'=undo 2 moves, 'd'=toggle debug, 'q'=quit.")
