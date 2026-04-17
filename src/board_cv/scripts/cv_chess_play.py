@@ -94,10 +94,10 @@ def stdin_reader():
 stdin_thread = threading.Thread(target=stdin_reader, daemon=True)
 stdin_thread.start()
 
-def get_stdin_line(timeout=0):
+def get_stdin_line():
     """Non-blocking poll of the stdin queue. Returns None if nothing available."""
     try:
-        return stdin_queue.get(timeout=timeout) if timeout else stdin_queue.get_nowait()
+        return stdin_queue.get_nowait()
     except queue.Empty:
         return None
 
@@ -552,7 +552,7 @@ try:
         # === CV DETECTION (only when not in override mode) ===================
         # =====================================================================
 
-        if override_state == "idle" and key == ord('r'):
+        if override_state == "idle" and (key == ord('r') or token == 'r'):
             if ref_frame is None:
                 ref_frame = frame_raw.copy()
                 print("[DEBUG] Initial frame saved.")
