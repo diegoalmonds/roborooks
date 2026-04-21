@@ -310,7 +310,7 @@ try:
         token = get_stdin_line()
 
         # --- Top-level commands ---
-        if token == 'q' or key == ord('q'):
+        if (token == 'q' or key == ord('q')) and override_state == "idle":
             print("[INFO] Quitting.")
             break
 

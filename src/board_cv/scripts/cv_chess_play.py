@@ -425,6 +425,7 @@ except Exception as e:
 # === GAME STATE ==============================================================
 # =============================================================================
 
+# board = chess.Board("rnbqkbnr/1P6/8/8/8/8/8/RNBQKBNR w KQkq - 0 1") testing promotion
 board = chess.Board()
 ref_frame = None
 last_move = None
@@ -467,7 +468,7 @@ try:
         token = get_stdin_line()
 
         # Handle top-level commands (work in any state)
-        if token == 'q' or key == ord('q'):
+        if (token == 'q' or key == ord('q')) and override_state == "idle":
             print("[INFO] Quitting.")
             break
 
