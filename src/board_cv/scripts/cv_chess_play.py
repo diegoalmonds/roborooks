@@ -735,7 +735,7 @@ try:
                         mv = chess.Move.from_uci(move_uci)
                         if mv in board.legal_moves:
                             lan = board.lan(mv)
-                            publish_move(lan, board)   # <-- was missing in original
+                            # publish_move(lan, board)   # <-- was missing in original
                             board.push(mv)
                             move_history.append(mv)
                             last_move = mv
