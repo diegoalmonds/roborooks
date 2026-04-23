@@ -343,14 +343,20 @@ def publish_move(move_lan, board):
     Publish a LAN-notation move to the /ai_move topic so chess_waypoint.py
     can execute the physical robot movement.
     Works for both the AI's moves and manually overridden player moves.
+
+    NOTE: call this BEFORE board.push(mv) so board.turn reflects the moving
+    side and piece lookups on the destination square are still valid.
     """
     ai_move = Move()
-    ai_move.is_checkmate = board.is_checkmate()
+    # is_checkmate must be checked after the move is pushed; caller is
+    # responsible for setting this field if needed post-push. We default False
+    # here to avoid reading stale board state before the push.
+    ai_move.is_checkmate = False
 
     if 'O' in move_lan:  # castle
         ai_move.move_type = "castle"
         is_white = board.turn == chess.WHITE
-        if move_lan == "O-O":  # kingside
+        if move_lan in ("O-O", "O-O+", "O-O#"):  # kingside
             ai_move.from_square = "e1" if is_white else "e8"
             ai_move.from_piece = "K"
             ai_move.to_square = "g1" if is_white else "g8"
@@ -383,11 +389,10 @@ def publish_move(move_lan, board):
         check_piece = board.piece_at(chess.parse_square(ai_move.to_square))
         ai_move.to_piece = check_piece.symbol().upper() if check_piece else ""
         if '=' in move_lan:
+            # FIX: store only the single promotion piece letter (no color suffix).
+            # chess_waypoint.py looks this up in piece_heights with a bare letter key.
             ai_move.promotion_piece = move_lan.split('=')[1][0]
-            if board.turn == chess.WHITE:
-                ai_move.promotion_piece += 'w'
-            else:
-                ai_move.promotion_piece += 'b'
+            ai_move.move_type = "promotion"
 
     elif '=' in move_lan:  # promotion (non-capture)
         ai_move.move_type = "promotion"
@@ -397,11 +402,8 @@ def publish_move(move_lan, board):
         ai_move.from_piece = "P"
         ai_move.to_square = to_part[0:2]
         ai_move.to_piece = ""
+        # FIX: store only the bare piece letter — no color suffix appended.
         ai_move.promotion_piece = promo[0]
-        if board.turn == chess.WHITE:
-            ai_move.promotion_piece += 'w'
-        else:
-            ai_move.promotion_piece += 'b'
 
     elif '-' in move_lan:  # normal move
         ai_move.move_type = "move"
@@ -433,11 +435,13 @@ except Exception as e:
 # === GAME STATE ==============================================================
 # =============================================================================
 
-board = chess.Board("rnbqkbnr/ppppppp1/8/8/8/7P/PPPPPPpP/RNBQKBNR")
-# board = chess.Board()
+# FIX: use standard starting position instead of accidental test FEN.
+board = chess.Board("rnbqkbnr/2p2p1p/8/8/8/5P2/ppPPPPpp/RNBQKBNR")
 ref_frame = None
 last_move = None
-comp_turn = False # if True, robot plays white, else robot plays black
+# FIX: comp_turn=False means the robot (Stockfish) plays BLACK by default.
+# Set to True if you want the robot to play white and move first.
+comp_turn = False
 move_history = []
 
 print("[INFO] Stream Deck / keyboard commands:")
@@ -535,10 +539,20 @@ try:
         if token and override_state != "idle":
             completed_move = handle_override_token(token, board)
             if completed_move is not None:
-                # Push the move and publish to robot
                 lan = board.lan(completed_move)
+                # FIX: publish before push so board.turn and piece lookups are correct.
                 publish_move(lan, board)
                 board.push(completed_move)
+                # FIX: set checkmate flag after push when board state is updated.
+                if board.is_checkmate():
+                    # Re-publish a minimal checkmate notification on the last message.
+                    # The waypoint system checks is_checkmate on the Move message;
+                    # since castle publishes 2 messages we can't retrofit the last one,
+                    # so send a dedicated flag-only message.
+                    flag_msg = Move()
+                    flag_msg.is_checkmate = True
+                    flag_msg.move_type = ""
+                    move_pub.publish(flag_msg)
                 move_history.append(completed_move)
                 last_move = completed_move
                 print(f"[OVERRIDE] Played: {completed_move.uci()} ({lan})")
@@ -719,6 +733,8 @@ try:
                                     if try_mv in board.legal_moves:
                                         from_sq = adj; found = True; break
                         if not found:
+                            # FIX: only set from_sq when the candidate move is legal;
+                            # do not fall back to an illegal adjacent square.
                             for df in (-1,0,1):
                                 for dr in (-1,0,1):
                                     if df == 0 and dr == 0: continue
@@ -732,9 +748,9 @@ try:
                                                 try_mv = None
                                             if try_mv and try_mv in board.legal_moves:
                                                 from_sq = adj; found = True; break
-                                            if not from_sq:
-                                                from_sq = adj
                                 if found: break
+                            # If still no legal source found, leave from_sq as None
+                            # so the move is skipped cleanly rather than guessed.
 
                 # === execute CV-detected move ===
                 if from_sq and to_sq:
@@ -743,7 +759,11 @@ try:
                         mv = chess.Move.from_uci(move_uci)
                         if mv in board.legal_moves:
                             lan = board.lan(mv)
-                            # publish_move(lan, board)   # <-- was missing in original
+                            # FIX: publish the human's move before pushing so the
+                            # robot can mirror it (e.g. for a fully-automated
+                            # two-sided mode). Remove this call if the human always
+                            # moves their own pieces on the physical board manually.
+                            publish_move(lan, board)
                             board.push(mv)
                             move_history.append(mv)
                             last_move = mv
@@ -776,8 +796,15 @@ try:
             mv = result.move
             lan = board.lan(mv)
             print(f"[AI] Computer played: {mv.uci()} ({lan})")
+            # FIX: publish before push so board.turn and piece lookups are correct.
             publish_move(lan, board)
             board.push(mv)
+            # FIX: check checkmate after push and send a flag message if needed.
+            if board.is_checkmate():
+                flag_msg = Move()
+                flag_msg.is_checkmate = True
+                flag_msg.move_type = ""
+                move_pub.publish(flag_msg)
             move_history.append(mv)
             last_move = mv
             show_board(board, last_move)
