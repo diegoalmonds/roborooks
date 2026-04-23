@@ -436,7 +436,8 @@ except Exception as e:
 # =============================================================================
 
 # FIX: use standard starting position instead of accidental test FEN.
-board = chess.Board("rnbqkbnr/2p2p1p/8/8/8/5P2/ppPPPPpp/RNBQKBNR")
+# board = chess.Board("rnbqkbnr/2p2p1p/8/8/8/5P2/ppPPPPpp/RNBQKBNR")
+board = chess.Board()
 ref_frame = None
 last_move = None
 # FIX: comp_turn=False means the robot (Stockfish) plays BLACK by default.
@@ -797,7 +798,6 @@ try:
             lan = board.lan(mv)
             print(f"[AI] Computer played: {mv.uci()} ({lan})")
             # FIX: publish before push so board.turn and piece lookups are correct.
-            publish_move(lan, board)
             board.push(mv)
             # FIX: check checkmate after push and send a flag message if needed.
             if board.is_checkmate():
