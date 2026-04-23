@@ -384,6 +384,10 @@ def publish_move(move_lan, board):
         ai_move.to_piece = check_piece.symbol().upper() if check_piece else ""
         if '=' in move_lan:
             ai_move.promotion_piece = move_lan.split('=')[1][0]
+            if board.turn == chess.WHITE:
+                ai_move.promotion_piece += 'w'
+            else:
+                ai_move.promotion_piece += 'b'
 
     elif '=' in move_lan:  # promotion (non-capture)
         ai_move.move_type = "promotion"
@@ -394,6 +398,10 @@ def publish_move(move_lan, board):
         ai_move.to_square = to_part[0:2]
         ai_move.to_piece = ""
         ai_move.promotion_piece = promo[0]
+        if board.turn == chess.WHITE:
+            ai_move.promotion_piece += 'w'
+        else:
+            ai_move.promotion_piece += 'b'
 
     elif '-' in move_lan:  # normal move
         ai_move.move_type = "move"
@@ -425,8 +433,8 @@ except Exception as e:
 # === GAME STATE ==============================================================
 # =============================================================================
 
-# board = chess.Board("rnbqkbnr/1P6/8/8/8/8/8/RNBQKBNR w KQkq - 0 1") testing promotion
-board = chess.Board()
+board = chess.Board("rnbqkbnr/ppppppp1/8/8/8/7P/PPPPPPpP/RNBQKBNR")
+# board = chess.Board()
 ref_frame = None
 last_move = None
 comp_turn = False # if True, robot plays white, else robot plays black

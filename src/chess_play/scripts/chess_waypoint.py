@@ -53,7 +53,7 @@ class ChessWaypointSystem:
         self._limb = intera_interface.Limb()
         self._current_angles = self._limb.joint_angles().values()
         print("Current joint angles:", self._current_angles)
-        self._wpt_opts = MotionWaypointOptions(max_joint_speed_ratio = 0.4)
+        self._wpt_opts = MotionWaypointOptions(max_joint_speed_ratio = 0.3)
         self._ai_move_sub = rospy.Subscriber(
             "/ai_move",
             Move,
