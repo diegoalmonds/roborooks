@@ -183,8 +183,7 @@ class ChessWaypointSystem:
         self._move(from_square=promotion_piece + "_promote", to_square=to_square, piece=promotion_piece) # move promotion piece to promotion square
 
     def _checkmate(self, from_square=None, to_square=None, piece=None):
-        # define checkmate sequence of waypoints here
-        pass
+        quit()
 
     def _send_single_waypoint(self, square=None, angles=None, pause=0.5):
         rospy.loginfo(f"Sending single waypoint for position: {square}")

@@ -433,8 +433,8 @@ except Exception as e:
 # === GAME STATE ==============================================================
 # =============================================================================
 
-board = chess.Board("rnbqkbnr/ppppppp1/8/8/8/7P/PPPPPPpP/RNBQKBNR")
-# board = chess.Board()
+# board = chess.Board("rnbqkbnr/ppppppp1/8/8/8/7P/PPPPPPpP/RNBQKBNR")
+board = chess.Board()
 ref_frame = None
 last_move = None
 comp_turn = False # if True, robot plays white, else robot plays black
