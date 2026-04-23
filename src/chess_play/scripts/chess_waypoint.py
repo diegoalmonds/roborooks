@@ -5,7 +5,7 @@ import intera_interface
 import rospkg
 import yaml
 import os
-import serial
+import serial.tools.list_ports
 
 from intera_motion_interface import (
     MotionWaypoint,
@@ -27,7 +27,23 @@ piece_heights = {
 
 JOINT_KEYS = ['right_j0', 'right_j1', 'right_j2', 'right_j3', 'right_j4', 'right_j5', 'right_j6']
 
-PORT = "/dev/ttyACM0"
+def find_serial_port():
+    ports = list(serial.tools.list_ports.comports())
+
+    for port in ports:
+        rospy.loginfo(f"Detected port: {port.device} - {port.description}")
+
+        desc = port.description or ""
+
+        if (
+            "Arduino" in desc
+            or "CH340" in desc
+            or "USB Serial" in desc
+            or "CP210" in desc
+        ):
+            return port.device
+
+    return None
 BAUD = 115200
 
 # FIX: serial port is opened inside __init__ after ROS is initialised,
@@ -35,13 +51,17 @@ BAUD = 115200
 ser = None
 
 def magnet_on():
-    cmd = "PIN 9 ON\n"
-    ser.write(cmd.encode())
+    if ser is None:
+        rospy.logwarn("Magnet ON skipped (no serial connection).")
+        return
+    ser.write(b"PIN 9 ON\n")
     rospy.loginfo("MAGNET ON")
 
 def magnet_off():
-    cmd = "PIN 9 OFF\n"
-    ser.write(cmd.encode())
+    if ser is None:
+        rospy.logwarn("Magnet OFF skipped (no serial connection).")
+        return
+    ser.write(b"PIN 9 OFF\n")
     rospy.loginfo("MAGNET OFF")
 
 class ChessWaypointSystem:
@@ -51,12 +71,27 @@ class ChessWaypointSystem:
         # FIX: open serial port here, after rospy.init_node, so errors are
         # captured by the ROS logging system and the node shuts down cleanly.
         global ser
-        try:
-            ser = serial.Serial(PORT, BAUD, timeout=1)
-            rospy.loginfo(f"Serial port {PORT} opened at {BAUD} baud.")
-        except serial.SerialException as e:
-            rospy.logerr(f"Failed to open serial port {PORT}: {e}")
-            raise
+
+        port = find_serial_port()
+
+        if port is None:
+            rospy.logwarn("No serial device found. Magnet disabled.")
+            ser = None
+        else:
+            try:
+                ser = serial.Serial()
+                ser.port = port
+                ser.baudrate = BAUD
+                ser.timeout = 1
+                ser.dtr = False
+                ser.rts = False
+                ser.open()
+
+                rospy.loginfo(f"Connected to serial port: {port}")
+
+            except Exception as e:
+                rospy.logerr(f"Failed to open serial port {port}: {e}")
+                ser = None
 
         rospack = rospkg.RosPack()
         pkg_path = rospack.get_path("position_calibration")
@@ -77,6 +112,19 @@ class ChessWaypointSystem:
 
         self._rs = intera_interface.RobotEnable(intera_interface.CHECK_VERSION)
         self._rs.enable()
+
+        # port = find_serial_port()
+
+        # if port is None:
+        #     rospy.logwarn("No serial device found. Magnet disabled.")
+        #     ser = None
+        # else:
+        #     try:
+        #         ser = serial.Serial(port, BAUD, timeout=1)
+        #         rospy.loginfo(f"Connected to {port}")
+        #     except serial.SerialException as e:
+        #         rospy.logerr(f"Failed to open serial port {port}: {e}")
+        #         ser = None
 
     def _load_yaml(self):
         with open(self._yaml_path, 'r') as f:

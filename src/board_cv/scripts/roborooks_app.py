@@ -342,12 +342,14 @@ class ProcessCard(QFrame):
             self._stop()
 
     def _build_cmd(self):
-        """Build the shell command that sources ROS and runs the script."""
-        cmds = []
-        cmds.append(ROS_SETUP)
-        if os.path.exists(WS_SETUP):
-            cmds.append(f"source {WS_SETUP}")
-        cmds.append(f"python3 {shlex.quote(self._script)}")
+        cmds = [
+            "source /opt/ros/noetic/setup.bash",
+            "cd ~/roborooks",  # IMPORTANT: workspace root
+            "source devel/setup.bash",
+            "export ROS_MASTER_URI=http://10.0.0.6:11311",
+            "export ROS_IP=10.0.0.4",
+            f"python3 {shlex.quote(self._script)}"
+        ]
         return ["bash", "-c", " && ".join(cmds)]
 
     def _start(self):
