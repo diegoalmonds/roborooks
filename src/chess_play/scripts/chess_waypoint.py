@@ -17,9 +17,9 @@ from geometry_msgs.msg import Pose, Point, Quaternion
 from board_cv.msg import Move
 
 piece_heights = {
-    'P': 0.067,
+    'P': 0.069,
     'R': 0.061,
-    'N': 0.048,
+    'N': 0.049,
     'B': 0.039,
     'Q': 0.0327,
     'K': 0.0270
@@ -181,6 +181,7 @@ class ChessWaypointSystem:
         self._move(from_square=from_square, to_square=to_square, from_piece=from_piece, piece="P") # move pawn to promotion square
         self._discard(square=to_square, piece="P")
         self._move(from_square=promotion_piece + "_promote", to_square=to_square, piece=promotion_piece) # move promotion piece to promotion square
+
 
     def _checkmate(self, from_square=None, to_square=None, piece=None):
         quit()
